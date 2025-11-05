@@ -1,266 +1,309 @@
-# Real Estate Investor Platform
+# 🏠 Property Investor Tool
 
-A comprehensive platform for real estate investors to find properties, analyze deals, manage tenants, and streamline operations.
+A complete Real Estate Investor Platform for finding properties, analyzing deals, managing tenants, and streamlining property operations.
 
-## 🚀 Features
+[![GitHub](https://img.shields.io/badge/GitHub-property--investor--tool-blue?logo=github)](https://github.com/keithp05/property-investor-tool)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-### Property Discovery
-- **Multi-Source Aggregation**: Search properties from Zillow, Realtor.com, and Facebook Marketplace
-- **Advanced Filtering**: Filter by location, price, bedrooms, property type, and more
-- **Duplicate Detection**: Automatically removes duplicate listings from different sources
+---
 
-### AI-Powered Analysis
-- **Comparative Market Analysis (CMA)**: AI-generated property valuations using GPT-4
-- **Rental Rate Estimation**: Smart rental price predictions based on market data
-- **Investment Projections**: ROI calculations and cash flow analysis
-- **Market Trends**: Historical price trends and appreciation forecasts
+## 🚀 Quick Start
 
-### Safety & Demographics
-- **Crime Data Integration**: Access police reports and crime statistics for any location
-- **Safety Grades**: A-F safety ratings for neighborhoods
-- **Tenant Demographics**: AI analysis of rental demand and tenant profiles
-
-### Lease Management
-- **Automated Lease Generation**: AI-powered lease agreements with legal compliance
-- **State-Specific Compliance**: Lease terms tailored to state laws
-- **Move-In Checklists**: Comprehensive property inspection documents
-- **Lease Amendments**: Easy modifications to existing leases
-
-### Tenant Portal
-- **Maintenance Requests**: Tenants can report issues with photos
-- **Request Tracking**: Real-time status updates on maintenance tickets
-- **Photo Uploads**: Attach multiple images to maintenance requests
-- **Communication**: Direct messaging with property managers
-
-## 🛠 Tech Stack
-
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes
-- **Database**: PostgreSQL with Prisma ORM
-- **AI**: OpenAI GPT-4 for analysis and document generation
-- **APIs**:
-  - Zillow (via RapidAPI)
-  - Realtor.com (via RapidAPI)
-  - Facebook Graph API
-  - Crime Data APIs (SpotCrime, FBI Crime Data)
-
-## 📦 Installation
-
-### Prerequisites
-- Node.js 18+
-- PostgreSQL database
-- API Keys (see below)
-
-### Setup Steps
-
-1. **Clone and Install**
 ```bash
-cd "Realestate App"
+# Clone the repository
+git clone https://github.com/keithp05/property-investor-tool.git
+cd property-investor-tool
+
+# Install dependencies
 npm install
-```
 
-2. **Environment Variables**
-```bash
+# Set up environment variables
 cp .env.example .env
-```
+# Edit .env with your API keys
 
-Edit `.env` and add your API keys:
-- `DATABASE_URL`: PostgreSQL connection string
-- `OPENAI_API_KEY`: OpenAI API key for AI analysis
-- `ZILLOW_API_KEY`: Zillow/RapidAPI key
-- `REALTOR_API_KEY`: Realtor.com/RapidAPI key
-- `FACEBOOK_GRAPH_API_KEY`: Facebook Graph API token
-- `CRIME_REPORTS_API_KEY`: Crime data API key
-
-3. **Database Setup**
-```bash
-npx prisma generate
-npx prisma db push
-```
-
-4. **Run Development Server**
-```bash
+# Run development server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Visit http://localhost:3000 to see your app!
 
-## 🔑 API Keys Required
+---
 
-### OpenAI (Required for AI features)
-- Sign up at [platform.openai.com](https://platform.openai.com)
-- Create API key
-- Pricing: ~$0.01-0.03 per analysis
+## ✨ Features
 
-### Property Data APIs
+### 🔍 Property Search
+- **Multi-Source Aggregation** - Search from County Records, Craigslist, and Bright Data
+- **3 Search Methods** - City/State, ZIP code, or GPS location
+- **Auction Properties** - Track tax sales and foreclosures with countdown timers
+- **Demo Data Fallback** - Works without API keys for testing
 
-**Option 1: RapidAPI (Recommended)**
-- Sign up at [rapidapi.com](https://rapidapi.com)
-- Subscribe to:
-  - Zillow API
-  - Realtor.com API
+### 📊 AI-Powered Analysis
+- **CMA Reports** - AI-generated Comparative Market Analysis with GPT-4o-mini
+- **Sales Comparables** - Find similar properties with automated valuation
+- **Rental Comparables** - Estimate rental income potential
+- **Crime Scoring** - A-F safety grades for any location
+- **Investment Recommendations** - AI analysis of investment potential
 
-**Option 2: Direct APIs**
-- Zillow Bridge API (partners only)
-- Realtor.com Data API
+### 👥 Tenant Management
+- **Tenant Database** - Track tenant information and lease details
+- **Lease Tracking** - Monitor lease expiration dates
+- **Renewal Workflow** - Automated lease renewal process
+- **Screening** - Store tenant screening data
 
-### Crime Data APIs
-- **SpotCrime**: [spotcrime.com/api](https://spotcrime.com/api)
-- **FBI Crime Data**: [crime-data-explorer.fr.cloud.gov/api](https://crime-data-explorer.fr.cloud.gov/api)
-- **CrimeReports.com**: Contact for API access
+### 💰 Billing & Payments
+- **15+ Bill Types** - Rent, utilities, HOA, lawn care, pest control, and more
+- **Recurring Bills** - Auto-generate monthly/quarterly/annual bills
+- **Payment Tracking** - 10 payment methods supported
+- **Late Fees** - Automatic late fee calculation
+- **Auto-Pay** - Tenant auto-payment enrollment
 
-### Facebook Marketplace (Optional)
-- Create Facebook App at [developers.facebook.com](https://developers.facebook.com)
-- Get Graph API token
+### 📝 Lease Management
+- **Lease Generation** - Create professional leases with line items
+- **Vendor Accounts** - Track account numbers for utilities and services
+- **Renewal Workflow** - 90-day lease expiration warnings
+- **Calendar Invites** - Send rent reminders with .ics files
 
-## 🗂 Project Structure
+### 🏗️ Property Inspections
+- **Move-In/Move-Out** - Document property condition
+- **Photo Uploads** - Before/after photo comparison
+- **LiDAR Floor Plans** - iOS RoomPlan integration
+- **AI Damage Assessment** - Classify wear & tear vs damage
+- **Security Deposits** - Auto-calculate refund amounts
 
-```
-src/
-├── app/
-│   ├── api/              # API routes
-│   │   ├── properties/   # Property search
-│   │   ├── analysis/     # CMA & rental analysis
-│   │   ├── crime/        # Crime data
-│   │   ├── lease/        # Lease generation
-│   │   └── maintenance/  # Maintenance requests
-│   ├── dashboard/        # Investor dashboard
-│   ├── tenant-portal/    # Tenant portal
-│   └── page.tsx          # Landing page
-├── components/           # React components
-├── services/             # Business logic
-│   ├── propertyAggregator.ts  # Multi-source property search
-│   ├── aiAnalysis.ts          # AI-powered CMA & analysis
-│   ├── crimeData.ts           # Crime data integration
-│   └── leaseGenerator.ts      # Lease document generation
-├── types/                # TypeScript types
-└── lib/                  # Utilities
-prisma/
-└── schema.prisma         # Database schema
-```
+### 💼 Accounting Integrations
+- **10+ Platforms** - QuickBooks, Xero, Wave, FreshBooks, and more
+- **Auto-Sync** - Income and expenses sync automatically
+- **OAuth 2.0** - Secure authentication
+- **Transaction Matching** - Link bills to accounting entries
 
-## 🎯 Usage
+---
 
-### Search Properties
-```typescript
-// POST /api/properties/search
-{
-  "city": "Austin",
-  "state": "TX",
-  "minPrice": 200000,
-  "maxPrice": 500000,
-  "minBedrooms": 3,
-  "sources": ["zillow", "realtor", "facebook"]
-}
-```
+## 🛠️ Tech Stack
 
-### Generate CMA Report
-```typescript
-// POST /api/analysis/cma
-{
-  "property": { /* property object */ },
-  "comparables": [ /* array of comparable properties */ ]
-}
-```
+- **Framework**: Next.js 15 (App Router, Turbopack)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Database**: Prisma ORM (SQLite dev, PostgreSQL prod)
+- **AI**: OpenAI GPT-4o-mini
+- **APIs**: Bright Data, OpenStreetMap, OpenAI Vision
 
-### Get Crime Data
-```typescript
-// POST /api/crime
-{
-  "latitude": 30.2672,
-  "longitude": -97.7431,
-  "address": "123 Main St, Austin, TX"
-}
-```
+---
 
-### Generate Lease
-```typescript
-// POST /api/lease/generate
-{
-  "propertyAddress": "123 Main St",
-  "landlordName": "John Doe",
-  "tenantName": "Jane Smith",
-  "monthlyRent": 2400,
-  "securityDeposit": 2400,
-  "startDate": "2024-11-01",
-  "endDate": "2025-10-31"
-}
-```
+## 📦 Installation & Setup
 
-## 🔐 Authentication
+### Prerequisites
 
-The app uses NextAuth.js for authentication. To set up:
+- Node.js 18+ and npm
+- Git
 
-1. Add `NEXTAUTH_SECRET` to `.env`
-2. Configure providers in `src/app/api/auth/[...nextauth]/route.ts`
-3. Implement user registration and login
+### Local Development
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/keithp05/property-investor-tool.git
+   cd property-investor-tool
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit `.env` and add your API keys:
+   ```env
+   # Required
+   DATABASE_URL="file:./dev.db"
+   NEXTAUTH_URL="http://localhost:3000"
+   NEXTAUTH_SECRET="<generate-with-openssl-rand-base64-32>"
+
+   # Optional - Property Data
+   BRIGHT_DATA_API_TOKEN="your-token-here"
+   BRIGHT_DATA_DATASET_ID="your-dataset-id"
+
+   # Optional - AI Analysis
+   OPENAI_API_KEY="sk-your-key-here"
+   ```
+
+4. **Initialize the database**
+   ```bash
+   npx prisma migrate dev
+   npx prisma generate
+   ```
+
+5. **Run development server**
+   ```bash
+   npm run dev
+   ```
+
+6. **Open your browser**
+   - Visit http://localhost:3000
+   - Create an account and start exploring!
+
+---
 
 ## 🚀 Deployment
 
-### Vercel (Recommended)
-```bash
-vercel deploy
+### Quick Deploy to Vercel (5 minutes)
+
+1. **Via Vercel Dashboard**
+   - Go to https://vercel.com/signup
+   - Click "Continue with GitHub"
+   - Import `keithp05/property-investor-tool`
+   - Click "Deploy"
+
+2. **Via Command Line**
+   ```bash
+   npx vercel login
+   npx vercel --prod --yes
+   ```
+
+3. **Add Environment Variables**
+   - In Vercel Dashboard → Settings → Environment Variables
+   - Add: `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, and API keys
+
+4. **Optional: Add Production Database**
+   ```bash
+   # Set up AWS RDS PostgreSQL with auto-scaling
+   ./setup-aws-rds.sh
+
+   # Run migrations
+   ./prepare-production-db.sh
+   ```
+
+**Full deployment guide**: See [QUICK_START_DEPLOYMENT.md](./QUICK_START_DEPLOYMENT.md)
+
+---
+
+## 💰 Pricing & Costs
+
+### Development (Free)
+- Runs on SQLite with demo data
+- Perfect for testing and development
+- **Cost: $0/month**
+
+### Production (Starting at ~$15/month)
+- **Vercel**: FREE (or $20/mo for custom domain)
+- **AWS RDS PostgreSQL**: ~$12-15/month (db.t4g.micro)
+- **Auto-scales** to $240/month at high traffic
+
+---
+
+## 📁 Project Structure
+
+```
+property-investor-tool/
+├── prisma/
+│   └── schema.prisma          # Database schema
+├── src/
+│   ├── app/                   # Next.js app directory
+│   │   ├── api/               # API routes
+│   │   ├── properties/        # Property search & details
+│   │   ├── tenants/           # Tenant management
+│   │   └── ...
+│   ├── services/              # Business logic
+│   │   ├── propertyAggregator.ts
+│   │   ├── propertyAnalysisService.ts
+│   │   ├── demoDataService.ts
+│   │   └── ...
+│   └── types/                 # TypeScript types
+├── scripts/                   # Deployment scripts
+│   ├── deploy-to-vercel.sh
+│   ├── setup-aws-rds.sh
+│   └── prepare-production-db.sh
+└── docs/                      # Documentation
+    ├── QUICK_START_DEPLOYMENT.md
+    ├── DEPLOYMENT_CHECKLIST.md
+    └── ...
 ```
 
-### Docker
-```bash
-docker build -t realestate-app .
-docker run -p 3000:3000 realestate-app
-```
+---
 
-### Environment Variables
-Make sure to set all environment variables in your deployment platform.
+## 🎯 Use Cases
 
-## 📊 Database Schema
+### For Real Estate Investors
+- Find undervalued properties and auction deals
+- Analyze investment potential with AI-powered reports
+- Track portfolio performance
 
-Key models:
-- **User**: Investors and tenants
-- **Property**: Property listings and owned properties
-- **Lease**: Lease agreements
-- **Tenant**: Tenant information and screening
-- **MaintenanceRequest**: Tenant maintenance requests
-- **CMAReport**: AI-generated market analysis
-- **CrimeReport**: Crime data cache
+### For Landlords
+- Manage multiple tenants and properties
+- Automate rent collection and billing
+- Track maintenance and repairs
 
-## 🧪 Testing
+### For Property Managers
+- Handle lease renewals and inspections
+- Integrate with accounting software
+- Generate professional reports
 
-```bash
-# Run tests
-npm test
+---
 
-# Run E2E tests
-npm run test:e2e
-```
+## 📚 Documentation
 
-## 📝 License
+- **[READY_TO_DEPLOY.md](./READY_TO_DEPLOY.md)** - Deployment overview
+- **[QUICK_START_DEPLOYMENT.md](./QUICK_START_DEPLOYMENT.md)** - Step-by-step deployment
+- **[DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)** - Complete checklist
+- **[DEPLOY.md](./DEPLOY.md)** - Technical details
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System architecture
+- **[FEATURE_SUMMARY.md](./FEATURE_SUMMARY.md)** - Complete feature list
 
-MIT License - See LICENSE file for details
+---
+
+## 🔒 Security
+
+- ✅ HTTPS/SSL encryption (automatic via Vercel)
+- ✅ Environment variables encrypted
+- ✅ Database SSL connections
+- ✅ No hardcoded API keys
+- ✅ OAuth 2.0 for integrations
+
+---
 
 ## 🤝 Contributing
 
-Contributions welcome! Please read CONTRIBUTING.md first.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- Built with [Next.js](https://nextjs.org/)
+- AI powered by [OpenAI](https://openai.com/)
+- Property data from [Bright Data](https://brightdata.com/)
+- Deployed on [Vercel](https://vercel.com/)
+
+---
 
 ## 📞 Support
 
-- Documentation: [docs link]
-- Issues: [GitHub Issues]
-- Email: support@example.com
+- **GitHub Issues**: [Report a bug](https://github.com/keithp05/property-investor-tool/issues)
+- **Documentation**: See the `docs/` directory
+- **Vercel Support**: https://vercel.com/support
 
-## ⚠️ Legal Notice
+---
 
-This platform is for informational purposes. Always:
-- Verify property data from official sources
-- Consult with real estate attorneys for legal documents
-- Comply with Fair Housing laws
-- Follow state and local regulations
+## 🎉 Live Demo
 
-## 🔄 Roadmap
+**Coming Soon** - Check back for a live demo URL!
 
-- [ ] Mobile app (React Native)
-- [ ] Advanced analytics dashboard
-- [ ] Property portfolio optimization
-- [ ] Automated rent collection
-- [ ] Contractor management
-- [ ] Financial reporting
-- [ ] Tax document generation
-- [ ] Multi-language support
+---
+
+**Built with ❤️ for real estate investors**

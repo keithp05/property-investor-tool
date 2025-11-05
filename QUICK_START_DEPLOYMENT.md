@@ -9,9 +9,8 @@ Your code is already pushed to GitHub! Now let's get it live.
 1. Go to **https://vercel.com/signup**
 2. Click **"Continue with GitHub"**
 3. Click **"New Project"**
-4. Find and import: `keithp05/network-automation-tools`
+4. Find and import: `keithp05/property-investor-tool`
 5. Configure:
-   - **Root Directory**: `Realestate App` (click "Edit" next to root directory)
    - **Framework Preset**: Next.js (auto-detected)
    - Click **"Deploy"**
 

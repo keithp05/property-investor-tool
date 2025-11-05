@@ -20,7 +20,7 @@ Your complete Real Estate Investor Platform is built and ready for production de
 
 ### Code Status:
 - ✅ All code committed to Git
-- ✅ Pushed to GitHub: `https://github.com/keithp05/network-automation-tools`
+- ✅ Pushed to GitHub: `https://github.com/keithp05/property-investor-tool`
 - ✅ Development server tested and working
 - ✅ Deployment scripts created and tested
 
@@ -38,9 +38,7 @@ Your complete Real Estate Investor Platform is built and ready for production de
 
 2. **Import Your Project:**
    - Click "New Project"
-   - Select: `keithp05/network-automation-tools`
-   - **Important:** Click "Edit" next to Root Directory
-   - Set Root Directory: `Realestate App`
+   - Select: `keithp05/property-investor-tool`
    - Click "Deploy"
 
 3. **Add Environment Variables** (after first deployment):
