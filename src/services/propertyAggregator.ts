@@ -124,21 +124,45 @@ export class PropertyAggregator {
       // 2. Web scraping (with proper legal compliance)
       // 3. Zillow Bridge API (for partners)
 
-      const response = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
-        params: {
-          location: `${params.city}, ${params.state}`,
-          status_type: 'ForSale',
-          ...(params.minPrice && { price_min: params.minPrice }),
-          ...(params.maxPrice && { price_max: params.maxPrice }),
-          ...(params.minBedrooms && { beds_min: params.minBedrooms }),
-        },
-        headers: {
-          'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
-          'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
-        },
-      });
+      // Fetch first 3 pages (41 results per page = ~120 properties)
+      // This balances API cost vs number of results
+      const pagesToFetch = 3;
+      const allProperties: Property[] = [];
 
-      return this.normalizeZillowData(response.data);
+      for (let page = 1; page <= pagesToFetch; page++) {
+        try {
+          const response = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+            params: {
+              location: `${params.city}, ${params.state}`,
+              status_type: 'ForSale',
+              page: page,
+              ...(params.minPrice && { price_min: params.minPrice }),
+              ...(params.maxPrice && { price_max: params.maxPrice }),
+              ...(params.minBedrooms && { beds_min: params.minBedrooms }),
+              ...(params.maxBedrooms && { beds_max: params.maxBedrooms }),
+            },
+            headers: {
+              'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
+              'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
+            },
+          });
+
+          const pageProperties = this.normalizeZillowData(response.data);
+          allProperties.push(...pageProperties);
+
+          console.log(`✅ Zillow page ${page}: ${pageProperties.length} properties (Total: ${allProperties.length})`);
+
+          // If this page returned fewer results than expected, we've reached the end
+          if (pageProperties.length < 40) {
+            break;
+          }
+        } catch (error) {
+          console.error(`Error fetching Zillow page ${page}:`, error);
+          // Continue with other pages even if one fails
+        }
+      }
+
+      return allProperties;
     } catch (error) {
       console.error('Zillow search error:', error);
       return [];
