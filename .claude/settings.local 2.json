@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app:*)",
+      "Read(//Users/keithperez/Documents/Claud/**)",
+      "Bash(sudo chown:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(mkdir:*)",
+      "Bash(node test-data-sources.js)",
+      "Bash(test:*)",
+      "Bash(npm install)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
