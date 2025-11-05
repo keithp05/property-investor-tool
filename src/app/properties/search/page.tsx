@@ -15,6 +15,7 @@ export default function PropertySearchPage() {
     minPrice: '',
     maxPrice: '',
     minBedrooms: '',
+    maxBedrooms: '',
     propertyType: '',
   });
   const [properties, setProperties] = useState<any[]>([]);
@@ -83,6 +84,7 @@ export default function PropertySearchPage() {
           minPrice: searchParams.minPrice ? parseInt(searchParams.minPrice) : undefined,
           maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
           minBedrooms: searchParams.minBedrooms ? parseInt(searchParams.minBedrooms) : undefined,
+          maxBedrooms: searchParams.maxBedrooms ? parseInt(searchParams.maxBedrooms) : undefined,
           propertyType: searchParams.propertyType || undefined,
           sources: ['zillow', 'realtor', 'facebook'],
         }),
@@ -248,7 +250,7 @@ export default function PropertySearchPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Min Price
@@ -285,6 +287,21 @@ export default function PropertySearchPage() {
                 onChange={(e) => setSearchParams({ ...searchParams, minBedrooms: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 placeholder="3"
+                min="0"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Max Bedrooms
+              </label>
+              <input
+                type="number"
+                value={searchParams.maxBedrooms}
+                onChange={(e) => setSearchParams({ ...searchParams, maxBedrooms: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                placeholder="5"
+                min="0"
               />
             </div>
           </div>
