@@ -12,9 +12,9 @@ export default function Navbar() {
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Search Properties', href: '/properties/search', icon: Search },
+    { name: 'Lease Generator', href: '/lease/generate', icon: FileText },
     { name: 'Tenants', href: '/tenants', icon: Users },
     { name: 'Tenant Portal', href: '/tenant-portal', icon: DollarSign },
-    { name: 'Quick Test', href: '/quick-test', icon: FileText },
   ];
 
   const isActive = (href: string) => {

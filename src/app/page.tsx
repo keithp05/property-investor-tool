@@ -33,7 +33,7 @@ export default function HomePage() {
             icon={<FileText className="h-8 w-8 text-indigo-600" />}
             title="Automated Lease Generation"
             description="Generate professional lease agreements with legal compliance built-in"
-            href="/properties/search"
+            href="/lease/generate"
           />
           <FeatureCard
             icon={<Wrench className="h-8 w-8 text-indigo-600" />}
