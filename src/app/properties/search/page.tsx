@@ -79,7 +79,7 @@ export default function PropertySearchPage() {
         body: JSON.stringify({
           city: searchParams.city,
           state: searchParams.state,
-          zipcode: searchParams.zipcode,
+          zipCode: searchParams.zipcode,  // Fixed: match backend camelCase
           address: searchParams.address,
           minPrice: searchParams.minPrice ? parseInt(searchParams.minPrice) : undefined,
           maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,

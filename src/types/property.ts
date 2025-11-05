@@ -30,6 +30,22 @@ export interface Property {
   crimeData?: CrimeData;
   demographics?: DemographicsData;
 
+  // Off-market deal metadata
+  metadata?: {
+    auctionDate?: string;
+    auctionType?: string;
+    county?: string;
+    caseNumber?: string;
+    judgmentAmount?: number;
+    owner?: string;
+    parcelId?: string;
+    dataSource?: string;
+    isOffMarket?: boolean;
+    dealType?: 'COURTHOUSE_AUCTION' | 'FSBO' | 'OWNER_FINANCING' | 'SHORT_SALE' | 'PRE_FORECLOSURE';
+    lastAssessed?: Date;
+    [key: string]: any;
+  };
+
   createdAt: Date;
   updatedAt: Date;
 }

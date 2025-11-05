@@ -4,10 +4,10 @@ import { demoDataService } from '@/services/demoDataService';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const propertyId = params.id;
+    const { id: propertyId } = await params;
     console.log('📊 Analyzing property:', propertyId);
 
     // Get property data from request body
@@ -34,10 +34,10 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const propertyId = params.id;
+    const { id: propertyId } = await params;
 
     // For demo purposes, get property from demo data service
     // In production, this would fetch from database

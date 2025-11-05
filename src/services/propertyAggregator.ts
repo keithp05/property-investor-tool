@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Property, PropertySearchParams } from '@/types/property';
 import { countyRecordsScraper } from './countyRecordsScraper';
 import { craigslistScraper } from './craigslistScraper';
+import { courthouseAuctionScraper } from './courthouseAuctionScraper';
 import { demoDataService } from './demoDataService';
 import { BrightDataService } from './brightDataService';
 
@@ -22,18 +23,25 @@ export class PropertyAggregator {
    * Falls back to demo data if no results found
    */
   async searchProperties(params: PropertySearchParams): Promise<Property[]> {
+    console.log('🔍 Searching with params:', params);
+
     const results = await Promise.allSettled([
-      // BULK DATA source (100K records for $250)
-      this.searchBrightData(params),
-
-      // Paid sources (optional - only if API keys are present)
+      // WORKING SOURCES
       this.searchZillow(params),
-      this.searchRealtor(params),
 
-      // FREE sources (always available!)
-      countyRecordsScraper.searchByLocation(params.city, params.state),
-      craigslistScraper.searchOwnerFinance(params.city, params.state),
-      craigslistScraper.searchFSBO(params.city, params.state),
+      // OFF-MARKET DEAL SOURCES (your primary focus!)
+      courthouseAuctionScraper.searchByLocation(
+        params.city || '',
+        params.state || '',
+        params.zipCode
+      ),
+
+      // DISABLED - not working sources until we fix them
+      // this.searchBrightData(params),  // 401 Unauthorized
+      // this.searchRealtor(params),     // 401 Unauthorized
+      // countyRecordsScraper.searchByLocation(params.city, params.state),  // Empty city/state issue
+      // craigslistScraper.searchOwnerFinance(params.city, params.state),   // Empty city/state issue
+      // craigslistScraper.searchFSBO(params.city, params.state),            // Empty city/state issue
     ]);
 
     const properties: Property[] = [];
@@ -47,23 +55,14 @@ export class PropertyAggregator {
     // Add metadata about sources used
     console.log(`Property search completed:
       - Total properties found: ${properties.length}
-      - Bright Data: ${properties.filter(p => p.source === 'bright-data').length}
-      - County records: ${properties.filter(p => p.source?.includes('county')).length}
-      - Craigslist: ${properties.filter(p => p.source === 'craigslist').length}
       - Zillow: ${properties.filter(p => p.source === 'zillow').length}
-      - Realtor: ${properties.filter(p => p.source === 'realtor').length}
+      - Courthouse Auctions: ${properties.filter(p => p.source === 'courthouse-auction').length}
     `);
 
     const deduplicated = this.deduplicateProperties(properties);
 
-    // If no properties found, return demo data for testing
-    if (demoDataService.shouldUseDemoData(deduplicated)) {
-      console.log('⚠️  No real properties found. Returning demo data for testing...');
-      const demoData = demoDataService.getDemoProperties(params.city, params.state, 10);
-      console.log(`✅ Generated ${demoData.length} demo properties`);
-      return demoData;
-    }
-
+    // NO MORE DEMO DATA - return what we actually found (even if empty)
+    console.log(`✅ Returning ${deduplicated.length} real properties`);
     return deduplicated;
   }
 
@@ -131,9 +130,12 @@ export class PropertyAggregator {
 
       for (let page = 1; page <= pagesToFetch; page++) {
         try {
+          // Build location string - prefer zipCode if provided, otherwise use city/state
+          const location = params.zipCode || `${params.city}, ${params.state}`;
+
           const response = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
             params: {
-              location: `${params.city}, ${params.state}`,
+              location: location,
               status_type: 'ForSale',
               page: page,
               ...(params.minPrice && { price_min: params.minPrice }),
@@ -229,32 +231,73 @@ export class PropertyAggregator {
    * Normalize Zillow data to our Property format
    */
   private normalizeZillowData(data: any): Property[] {
-    if (!data?.props) return [];
+    console.log('🔍 Normalizing Zillow data. Keys:', Object.keys(data || {}));
+    console.log('🔍 Data sample:', JSON.stringify(data).substring(0, 500));
 
-    return data.props.map((prop: any) => ({
-      id: `zillow-${prop.zpid}`,
-      address: prop.address?.streetAddress || '',
-      city: prop.address?.city || '',
-      state: prop.address?.state || '',
-      zipCode: prop.address?.zipcode || '',
-      latitude: prop.latitude,
-      longitude: prop.longitude,
-      propertyType: this.mapPropertyType(prop.propertyType),
-      bedrooms: prop.bedrooms || 0,
-      bathrooms: prop.bathrooms || 0,
-      squareFeet: prop.livingArea,
-      lotSize: prop.lotSize,
-      yearBuilt: prop.yearBuilt,
-      purchasePrice: prop.price,
-      currentValue: prop.price,
-      status: 'SEARCHING' as const,
-      source: 'zillow',
-      externalId: prop.zpid,
-      sourceUrl: prop.detailUrl,
-      images: prop.imgSrc ? [prop.imgSrc] : [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
+    if (!data?.props) {
+      console.log('⚠️  No props found in Zillow response');
+      return [];
+    }
+
+    console.log(`🔍 Found ${data.props.length} properties in Zillow response`);
+
+    const normalized = data.props.map((prop: any) => {
+      // Zillow address can be either:
+      // 1. Object: { streetAddress: "123 Main", city: "Austin", state: "TX", zipcode: "78701" }
+      // 2. String: "123 Main, Austin, TX 78701"
+      let address = '';
+      let city = '';
+      let state = '';
+      let zipCode = '';
+
+      if (typeof prop.address === 'string') {
+        // Parse string format: "2211 Geneva, Castroville, TX 78009"
+        address = prop.address;
+        const parts = prop.address.split(',').map((s: string) => s.trim());
+        if (parts.length >= 3) {
+          const stateZip = parts[parts.length - 1].split(' ');
+          city = parts[parts.length - 2];
+          state = stateZip[0];
+          zipCode = stateZip[1] || '';
+        }
+      } else if (prop.address) {
+        // Object format
+        address = prop.address.streetAddress || '';
+        city = prop.address.city || '';
+        state = prop.address.state || '';
+        zipCode = prop.address.zipcode || '';
+      }
+
+      return {
+        id: `zillow-${prop.zpid}`,
+        address,
+        city,
+        state,
+        zipCode,
+        latitude: prop.latitude,
+        longitude: prop.longitude,
+        propertyType: this.mapPropertyType(prop.propertyType),
+        bedrooms: prop.bedrooms || 0,
+        bathrooms: prop.bathrooms || 0,
+        squareFeet: prop.livingArea,
+        lotSize: prop.lotAreaValue,
+        yearBuilt: prop.yearBuilt,
+        purchasePrice: prop.price,
+        currentValue: prop.price,
+        status: 'SEARCHING' as const,
+        source: 'zillow',
+        externalId: prop.zpid?.toString(),
+        sourceUrl: prop.detailUrl,
+        images: prop.imgSrc ? [prop.imgSrc] : [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    });
+
+    console.log(`✅ Normalized ${normalized.length} properties`);
+    console.log('📍 Sample address:', normalized[0]?.address, normalized[0]?.city, normalized[0]?.zipCode);
+
+    return normalized;
   }
 
   /**
