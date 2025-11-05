@@ -6,9 +6,19 @@ import { CMAData, Property, DemographicsData } from '@/types/property';
  * Uses OpenAI to perform Comparative Market Analysis (CMA) and rental projections
  */
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization - only create client when needed
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is not set. AI analysis features require an OpenAI API key.');
+    }
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
 
 export class AIAnalysisService {
 
@@ -59,6 +69,7 @@ Respond in JSON format:
 `;
 
     try {
+      const openai = getOpenAIClient();
       const response = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [{ role: 'user', content: prompt }],
@@ -130,6 +141,7 @@ Provide:
 `;
 
     try {
+      const openai = getOpenAIClient();
       const response = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [{ role: 'user', content: prompt }],
@@ -178,6 +190,7 @@ Respond in JSON:
 `;
 
     try {
+      const openai = getOpenAIClient();
       const response = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [{ role: 'user', content: prompt }],
@@ -235,6 +248,7 @@ Format as a detailed markdown report.
 `;
 
     try {
+      const openai = getOpenAIClient();
       const response = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [{ role: 'user', content: prompt }],

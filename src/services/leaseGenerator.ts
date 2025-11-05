@@ -1,8 +1,18 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization - only create client when needed
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is not set. Lease generation requires an OpenAI API key.');
+    }
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
 
 /**
  * Lease Generator Service
@@ -92,6 +102,7 @@ Format as a professional legal document with proper structure and formatting.
 `;
 
     try {
+      const openai = getOpenAIClient();
       const response = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [
@@ -179,6 +190,7 @@ Create a formal amendment document that:
 `;
 
     try {
+      const openai = getOpenAIClient();
       const response = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [{ role: 'user', content: prompt }],
@@ -242,6 +254,7 @@ Each item should have checkboxes for condition rating and space for notes.
 `;
 
     try {
+      const openai = getOpenAIClient();
       const response = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [{ role: 'user', content: prompt }],
