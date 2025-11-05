@@ -39,31 +39,37 @@ export default function HomePage() {
             icon={<Search className="h-8 w-8 text-indigo-600" />}
             title="Multi-Source Property Search"
             description="Aggregate listings from Zillow, Realtor.com, Facebook Marketplace, and more"
+            href="/properties/search"
           />
           <FeatureCard
             icon={<TrendingUp className="h-8 w-8 text-indigo-600" />}
             title="AI-Powered Analysis"
             description="Get instant CMA reports, rental rate estimates, and market projections using advanced AI"
+            href="/properties/search"
           />
           <FeatureCard
             icon={<FileText className="h-8 w-8 text-indigo-600" />}
             title="Automated Lease Generation"
             description="Generate professional lease agreements with legal compliance built-in"
+            href="/properties/search"
           />
           <FeatureCard
             icon={<Wrench className="h-8 w-8 text-indigo-600" />}
             title="Tenant Portal"
             description="Let tenants report issues with photos, track maintenance, and communicate easily"
+            href="/tenant-portal"
           />
           <FeatureCard
             icon={<Home className="h-8 w-8 text-indigo-600" />}
             title="Crime & Safety Data"
             description="Access police reports and safety statistics for any neighborhood"
+            href="/properties/search"
           />
           <FeatureCard
             icon={<TrendingUp className="h-8 w-8 text-indigo-600" />}
-            title="Tenant Projections"
-            description="Get AI-driven insights on tenant demographics and rental demand"
+            title="Tenant Management"
+            description="Manage tenants, leases, billing, and property operations"
+            href="/tenants"
           />
         </div>
 
@@ -90,12 +96,26 @@ export default function HomePage() {
   );
 }
 
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-  return (
-    <div className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition">
+function FeatureCard({ icon, title, description, href }: { icon: React.ReactNode; title: string; description: string; href?: string }) {
+  const content = (
+    <>
       <div className="mb-4">{icon}</div>
       <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
       <p className="text-gray-600">{description}</p>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition cursor-pointer block hover:scale-105">
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition">
+      {content}
     </div>
   );
 }
