@@ -3,10 +3,12 @@ import { Property, PropertySearchParams } from '@/types/property';
 import { countyRecordsScraper } from './countyRecordsScraper';
 import { craigslistScraper } from './craigslistScraper';
 import { demoDataService } from './demoDataService';
+import { BrightDataService } from './brightDataService';
 
 /**
  * Property Aggregator Service
  * Fetches properties from multiple sources:
+ * - BULK DATA: Bright Data (100K records for $250)
  * - FREE: County Records, Craigslist
  * - CHEAP: Zillow (RapidAPI), Realtor.com (RapidAPI)
  * - DEMO: Sample data when no real sources return results
@@ -21,6 +23,9 @@ export class PropertyAggregator {
    */
   async searchProperties(params: PropertySearchParams): Promise<Property[]> {
     const results = await Promise.allSettled([
+      // BULK DATA source (100K records for $250)
+      this.searchBrightData(params),
+
       // Paid sources (optional - only if API keys are present)
       this.searchZillow(params),
       this.searchRealtor(params),
@@ -42,6 +47,7 @@ export class PropertyAggregator {
     // Add metadata about sources used
     console.log(`Property search completed:
       - Total properties found: ${properties.length}
+      - Bright Data: ${properties.filter(p => p.source === 'bright-data').length}
       - County records: ${properties.filter(p => p.source?.includes('county')).length}
       - Craigslist: ${properties.filter(p => p.source === 'craigslist').length}
       - Zillow: ${properties.filter(p => p.source === 'zillow').length}
@@ -80,6 +86,32 @@ export class PropertyAggregator {
     });
 
     return this.deduplicateProperties(properties);
+  }
+
+  /**
+   * Search Bright Data (100K real estate records)
+   */
+  private async searchBrightData(params: PropertySearchParams): Promise<Property[]> {
+    try {
+      if (!process.env.BRIGHT_DATA_API_TOKEN || !process.env.BRIGHT_DATA_DATASET_ID) {
+        console.log('⚠️  Bright Data API credentials not configured');
+        return [];
+      }
+
+      const brightData = new BrightDataService({
+        apiToken: process.env.BRIGHT_DATA_API_TOKEN,
+        datasetId: process.env.BRIGHT_DATA_DATASET_ID,
+      });
+
+      console.log('🔍 Searching Bright Data for properties...');
+      const properties = await brightData.searchProperties(params);
+      console.log(`✅ Bright Data returned ${properties.length} properties`);
+
+      return properties;
+    } catch (error) {
+      console.error('Bright Data search error:', error);
+      return [];
+    }
   }
 
   /**
