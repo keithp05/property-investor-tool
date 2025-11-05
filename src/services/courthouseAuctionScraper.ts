@@ -51,14 +51,23 @@ export class CourthouseAuctionScraper {
    */
   async searchByLocation(city: string, state: string, zipCode?: string): Promise<Property[]> {
     try {
+      // If only ZIP code provided, try to get city/county from ZIP
+      if (zipCode && !city) {
+        const location = this.getLocationFromZip(zipCode);
+        if (location) {
+          city = location.city;
+          state = location.state;
+        }
+      }
+
       const county = this.getCityCounty(city, state);
 
       if (!county) {
-        console.log(`⚠️  No auction data available for ${city}, ${state}`);
+        console.log(`⚠️  No auction data available for ${city || zipCode}, ${state}`);
         return [];
       }
 
-      console.log(`🏛️  Searching ${county} courthouse auctions...`);
+      console.log(`🏛️  Searching ${county} County courthouse auctions...`);
 
       // Try multiple sources in parallel
       const results = await Promise.allSettled([
@@ -269,6 +278,41 @@ export class CourthouseAuctionScraper {
     };
 
     return cityToCounty[city.toLowerCase()] || null;
+  }
+
+  /**
+   * Get location info from ZIP code
+   */
+  private getLocationFromZip(zipCode: string): { city: string; state: string } | null {
+    // Texas ZIP codes
+    const texasZips: Record<string, string> = {
+      '787': 'Austin',      // 78701-78799
+      '782': 'San Antonio', // 78201-78299
+      '770': 'Houston',     // 77001-77099
+      '752': 'Dallas',      // 75201-75299
+      '761': 'Fort Worth',  // 76101-76199
+    };
+
+    // Check first 3 digits for Texas
+    const prefix = zipCode.substring(0, 3);
+    if (texasZips[prefix]) {
+      return { city: texasZips[prefix], state: 'TX' };
+    }
+
+    // Arizona ZIP codes
+    if (zipCode.startsWith('85')) {
+      return { city: 'Phoenix', state: 'AZ' };
+    }
+
+    // California ZIP codes
+    if (zipCode.startsWith('90') || zipCode.startsWith('91')) {
+      return { city: 'Los Angeles', state: 'CA' };
+    }
+    if (zipCode.startsWith('92')) {
+      return { city: 'San Diego', state: 'CA' };
+    }
+
+    return null;
   }
 
   /**
