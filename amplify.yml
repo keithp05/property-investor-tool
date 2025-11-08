@@ -7,7 +7,6 @@ frontend:
         - npx prisma generate
     build:
       commands:
-        - npx prisma migrate deploy
         - npm run build
   artifacts:
     baseDirectory: .next
