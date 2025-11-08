@@ -1,8 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import axios from 'axios';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const userId = (session.user as any).id;
+
+    // Get landlord profile
+    const landlordProfile = await prisma.landlordProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!landlordProfile) {
+      return NextResponse.json(
+        { success: false, error: 'Landlord profile not found' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { address, city, state, zipCode, purchasePrice, purchaseDate, monthlyMortgage, monthlyRent } = body;
 
@@ -55,42 +82,57 @@ export async function POST(request: NextRequest) {
       // Continue with default values
     }
 
-    // Create landlord property object
-    const landlordProperty = {
-      id: `landlord-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-      address,
-      city,
-      state,
-      zipCode,
+    // Save property to database
+    const property = await prisma.property.create({
+      data: {
+        landlordId: landlordProfile.id,
+        address,
+        city,
+        state,
+        zipCode,
 
-      // Auto-fetched details
-      bedrooms: propertyDetails.bedrooms,
-      bathrooms: propertyDetails.bathrooms,
-      squareFeet: propertyDetails.squareFeet,
-      yearBuilt: propertyDetails.yearBuilt,
-      propertyType: propertyDetails.propertyType,
-      estimatedValue: propertyDetails.estimatedValue,
+        // Auto-fetched details from Zillow
+        bedrooms: propertyDetails.bedrooms || 0,
+        bathrooms: propertyDetails.bathrooms || 0,
+        squareFeet: propertyDetails.squareFeet,
+        yearBuilt: propertyDetails.yearBuilt,
+        propertyType: propertyDetails.propertyType,
+        estimatedValue: propertyDetails.estimatedValue,
 
-      // Landlord-provided info
-      purchasePrice: purchasePrice ? parseInt(purchasePrice) : undefined,
-      purchaseDate,
-      monthlyMortgage: monthlyMortgage ? parseInt(monthlyMortgage) : undefined,
-      monthlyRent: monthlyRent ? parseInt(monthlyRent) : undefined,
+        // Landlord-provided info
+        purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
+        purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
+        monthlyMortgage: monthlyMortgage ? parseFloat(monthlyMortgage) : null,
+        monthlyRent: monthlyRent ? parseFloat(monthlyRent) : null,
 
-      // Status
-      status: monthlyRent ? 'RENTED' : 'VACANT',
-      currentTenant: undefined,
-      leaseEndDate: undefined,
+        // Status
+        status: monthlyRent ? 'RENTED' : 'VACANT',
+      },
+    });
 
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    console.log('✅ Property saved to database:', property.id);
 
-    console.log('✅ Landlord property created successfully');
-
+    // Return property data for UI
     return NextResponse.json({
       success: true,
-      property: landlordProperty,
+      property: {
+        id: property.id,
+        address: property.address,
+        city: property.city,
+        state: property.state,
+        zipCode: property.zipCode,
+        bedrooms: property.bedrooms,
+        bathrooms: property.bathrooms,
+        squareFeet: property.squareFeet,
+        yearBuilt: property.yearBuilt,
+        propertyType: property.propertyType,
+        estimatedValue: property.estimatedValue ? parseFloat(property.estimatedValue.toString()) : null,
+        purchasePrice: property.purchasePrice ? parseFloat(property.purchasePrice.toString()) : null,
+        purchaseDate: property.purchaseDate?.toISOString().split('T')[0],
+        monthlyMortgage: property.monthlyMortgage ? parseFloat(property.monthlyMortgage.toString()) : null,
+        monthlyRent: property.monthlyRent ? parseFloat(property.monthlyRent.toString()) : null,
+        status: property.status,
+      },
       message: 'Property added successfully',
     });
 

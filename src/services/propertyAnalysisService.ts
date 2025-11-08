@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { hudApiService } from './hudApiService';
 
 // Initialize OpenAI client
 const openai = process.env.OPENAI_API_KEY
@@ -267,18 +268,15 @@ class PropertyAnalysisService {
     property: any,
     estimatedRent: number
   ): Promise<GovernmentHousingAnalysis> {
-    // Section 8 Fair Market Rent (FMR) calculations based on bedroom count
-    const section8FMR = {
-      0: estimatedRent * 0.9,
-      1: estimatedRent * 0.95,
-      2: estimatedRent * 1.1,
-      3: estimatedRent * 1.25,
-      4: estimatedRent * 1.4,
-    };
+    // Fetch REAL Section 8 FMR data from HUD API by ZIP code
+    const zipCode = property.zipCode || '78253';
+    const bedrooms = property.bedrooms || 2;
 
-    const bedrooms = Math.min(property.bedrooms || 2, 4);
-    const section8Rent = Math.round(section8FMR[bedrooms as keyof typeof section8FMR] || estimatedRent);
+    const hudData = await hudApiService.getSection8FMR(zipCode, bedrooms);
+    const section8Rent = hudData.fmrAmount;
     const vaHudvashRent = Math.round(section8Rent * 1.05);
+
+    console.log(`✅ Section 8 FMR for ${zipCode} (${bedrooms}BR): $${section8Rent}/mo (Source: ${hudData.source})`);
 
     return {
       section8Eligible: true,
@@ -498,26 +496,41 @@ Provide analysis in this JSON format:
       this.getCrimeScore(property),
     ]);
 
-    // Calculate estimated values
+    // Calculate estimated values - PRIORITIZE REAL ZILLOW DATA over demo comps
     const avgCompPrice = comps.reduce((sum, comp) => sum + comp.price, 0) / comps.length;
-    const estimatedValue = Math.round(avgCompPrice);
+
+    // PRIORITY: Use Zillow Zestimate > Zillow Price > Demo Comps Average
+    const estimatedValue = Math.round(
+      property.zestimate || property.price || avgCompPrice
+    );
+
     const valueRange = {
       low: Math.round(estimatedValue * 0.95),
       high: Math.round(estimatedValue * 1.05),
     };
 
     const avgRent = rentalComps.reduce((sum, comp) => sum + comp.monthlyRent, 0) / rentalComps.length;
-    const estimatedRent = Math.round(avgRent);
-    const rentRange = {
-      low: Math.round(estimatedRent * 0.9),
-      high: Math.round(estimatedRent * 1.1),
-    };
 
     const baseSqft = property.squareFeet || 1500;
     const pricePerSqft = Math.round(estimatedValue / baseSqft);
 
-    // Generate government housing analysis
-    const governmentHousing = await this.generateGovernmentHousingAnalysis(property, estimatedRent);
+    // Generate government housing analysis FIRST to get Section 8 FMR
+    const governmentHousing = await this.generateGovernmentHousingAnalysis(property, Math.round(avgRent));
+
+    // Use the HIGHEST rent between:
+    // 1. Zillow rent estimate (if available)
+    // 2. Section 8 FMR (real HUD data)
+    // 3. Demo rental comps average
+    const estimatedRent = Math.max(
+      property.rentZestimate || 0,
+      governmentHousing.estimatedSection8Rent || 0,
+      Math.round(avgRent)
+    );
+
+    const rentRange = {
+      low: Math.round(estimatedRent * 0.9),
+      high: Math.round(estimatedRent * 1.1),
+    };
 
     // Generate 3 expert analyses
     const expertAnalyses = await this.generate3ExpertAnalyses(

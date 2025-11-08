@@ -1,5 +1,61 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+# Phase 1: Authentication, Database & Cloud Infrastructure
+
+## 🎯 Your Requirements Summary
+
+### Core Infrastructure
+- ✅ PostgreSQL database
+- ✅ NextAuth authentication with roles (Admin, Landlord, Tenant)
+- ✅ Subscription tiers (Free, Pro, Enterprise)
+- ✅ Dashboard with weather widget for property areas
+- ✅ Maintenance request tracking on dashboard
+
+### Cloud Services (AWS Primary, Cloud-Agnostic Design)
+- ✅ **AWS S3** - Photo storage (tenant photos auto-delete on lease end)
+- ✅ **AWS SES** - Email delivery for tenant invites, notifications
+- ✅ **Stripe** - Primary payment gateway
+- ✅ **Multiple payment methods** - Stripe, ACH, Venmo, Zelle, etc.
+- ✅ **QuickBooks Integration** - 2-way sync for accounting
+- ✅ **Cloud-agnostic architecture** - Portable to GCP, Azure
+
+## 📦 Package Installation
+
+```bash
+# Authentication
+npm install next-auth @auth/prisma-adapter bcryptjs
+npm install --save-dev @types/bcryptjs
+
+# Database
+npm install prisma @prisma/client
+npm install --save-dev prisma
+
+# AWS SDK
+npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
+npm install @aws-sdk/client-ses
+
+# Payment Processing
+npm install stripe @stripe/stripe-js
+
+# QuickBooks Integration
+npm install intuit-oauth node-quickbooks
+
+# Cloud-Agnostic Storage Adapter
+npm install @google-cloud/storage azure-storage
+
+# Weather API
+npm install axios
+
+# Email Templates
+npm install @react-email/components react-email
+
+# Utilities
+npm install dayjs uuid
+npm install --save-dev @types/uuid
+```
+
+## 🗄️ Database Schema (Prisma)
+
+```prisma
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -151,48 +207,11 @@ model Property {
   // Landlord Purchase Info
   purchasePrice   Decimal?
   purchaseDate    DateTime?
-
-  // Mortgage Details
   monthlyMortgage Decimal?
-  mortgageBalance Decimal?      // Current amount owed
-  mortgageRate    Float?         // Interest rate
-  mortgageTerm    Int?           // Term in months (e.g., 360 for 30 years)
-  mortgageStartDate DateTime?
-  lenderName      String?
-  loanNumber      String?
-
-  // Equity Tracking
-  currentValue    Decimal?       // Auto-updated from Zillow API
-  availableEquity Decimal?       // Calculated: currentValue - mortgageBalance
-  lastValueUpdate DateTime?
-
-  // Bank Integration (Plaid)
-  plaidAccessToken String?
-  plaidItemId      String?
-  plaidAccountId   String?
-  plaidLinked      Boolean @default(false)
-  plaidLastSync    DateTime?
-
-  // Payment Status
-  mortgagePaymentStatus String? // CURRENT, LATE, BEHIND
-  lastPaymentDate       DateTime?
-  nextPaymentDue        DateTime?
-  missedPayments        Int @default(0)
-
-  // Refinance Tracking
-  shouldConsiderRefi  Boolean @default(false)
-  refiRecommendation  String?  // System-generated recommendation
 
   // Rental Info
   monthlyRent     Decimal?
-  marketRent      Decimal?       // Market rate rent from AI analysis
   securityDeposit Decimal?
-
-  // Section 8 Housing Info
-  section8FMR     Decimal?       // HUD Fair Market Rent for this property
-  section8ContactName    String?  // Local housing authority name
-  section8ContactPhone   String?  // Housing authority phone
-  section8ContactWebsite String?  // Housing authority website
 
   // Status
   status          PropertyStatus @default(VACANT)
@@ -504,3 +523,153 @@ enum RequestStatus {
   COMPLETED
   CANCELLED
 }
+```
+
+## 🌩️ Cloud-Agnostic Architecture
+
+### Storage Adapter Pattern
+
+```typescript
+// lib/storage/adapter.ts
+
+interface StorageAdapter {
+  upload(file: Buffer, path: string): Promise<string>;
+  download(path: string): Promise<Buffer>;
+  delete(path: string): Promise<void>;
+  getSignedUrl(path: string, expiresIn: number): Promise<string>;
+}
+
+class S3Adapter implements StorageAdapter {
+  // AWS S3 implementation
+}
+
+class GCSAdapter implements StorageAdapter {
+  // Google Cloud Storage implementation
+}
+
+class AzureBlobAdapter implements StorageAdapter {
+  // Azure Blob Storage implementation
+}
+
+// Factory pattern
+export function getStorageAdapter(): StorageAdapter {
+  const provider = process.env.STORAGE_PROVIDER || 'AWS_S3';
+
+  switch (provider) {
+    case 'AWS_S3':
+      return new S3Adapter();
+    case 'GCP_STORAGE':
+      return new GCSAdapter();
+    case 'AZURE_BLOB':
+      return new AzureBlobAdapter();
+    default:
+      throw new Error(`Unknown storage provider: ${provider}`);
+  }
+}
+```
+
+### Email Adapter Pattern
+
+```typescript
+// lib/email/adapter.ts
+
+interface EmailAdapter {
+  sendEmail(to: string, subject: string, html: string): Promise<void>;
+  sendTemplateEmail(to: string, templateId: string, data: any): Promise<void>;
+}
+
+class SESAdapter implements EmailAdapter {
+  // AWS SES implementation
+}
+
+class SendGridAdapter implements EmailAdapter {
+  // SendGrid implementation
+}
+
+class AzureEmailAdapter implements EmailAdapter {
+  // Azure Communication Services implementation
+}
+```
+
+## 🎨 Dashboard with Weather
+
+```typescript
+// app/dashboard/page.tsx
+
+import WeatherWidget from '@/components/WeatherWidget';
+import MaintenanceRequests from '@/components/MaintenanceRequests';
+import RentPaymentStatus from '@/components/RentPaymentStatus';
+
+export default async function DashboardPage() {
+  const user = await getServerSession();
+
+  if (user.role === 'LANDLORD') {
+    return <LandlordDashboard />;
+  } else if (user.role === 'TENANT') {
+    return <TenantDashboard />;
+  }
+}
+
+// Landlord sees: all properties, all requests, all payments
+// Tenant sees: their property, their requests, their payments
+```
+
+## 💳 Multi-Payment Provider Setup
+
+```typescript
+// lib/payments/adapter.ts
+
+interface PaymentAdapter {
+  createPaymentIntent(amount: number, customerId: string): Promise<any>;
+  processPayment(paymentId: string): Promise<any>;
+  refund(paymentId: string, amount: number): Promise<any>;
+}
+
+class StripeAdapter implements PaymentAdapter {
+  // Stripe implementation
+}
+
+class PlaidACHAdapter implements PaymentAdapter {
+  // Plaid ACH implementation
+}
+
+// Support multiple payment methods simultaneously
+```
+
+## 📊 QuickBooks Integration
+
+```typescript
+// lib/accounting/quickbooks.ts
+
+export class QuickBooksService {
+  async syncRentPayment(payment: RentPayment) {
+    // Create invoice in QuickBooks
+    // Record payment in QuickBooks
+    // Update sync status in database
+  }
+
+  async syncExpense(maintenanceRequest: MaintenanceRequest) {
+    // Create expense/bill in QuickBooks
+  }
+
+  async get2WaySync() {
+    // Pull QB data and update local database
+    // Push local changes to QB
+  }
+}
+```
+
+## 🚀 Next Steps
+
+1. Install all packages
+2. Set up PostgreSQL locally
+3. Create Prisma schema
+4. Run migrations
+5. Implement NextAuth
+6. Create login/signup pages
+7. Build landlord dashboard with weather
+8. Set up AWS S3 SDK
+9. Set up AWS SES SDK
+10. Create cloud-agnostic adapters
+
+Ready to start? I'll begin with package installation and Prisma setup.
