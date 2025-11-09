@@ -14,8 +14,7 @@ export async function middleware(request: NextRequest) {
   const publicRoutes = ['/', '/login', '/signup'];
   const isPublicRoute = publicRoutes.includes(pathname) ||
                         pathname.startsWith('/_next') ||
-                        pathname.startsWith('/api/auth') ||
-                        pathname.startsWith('/api/properties/search'); // Allow property search for demo
+                        pathname.startsWith('/api/'); // Allow ALL API routes (they handle their own auth)
 
   // Allow public routes
   if (isPublicRoute) {
