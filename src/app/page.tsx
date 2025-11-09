@@ -65,7 +65,7 @@ export default function HomePage() {
     if (status === 'authenticated') {
       loadDashboard();
     } else if (status === 'unauthenticated') {
-      setLoading(false);
+      router.push('/signup');
     }
   }, [status]);
 
@@ -85,11 +85,6 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  // Show landing page if not authenticated
-  if (status === 'unauthenticated' || (status === 'loading' && !session)) {
-    return <LandingPage />;
   }
 
   if (loading || status === 'loading') {
