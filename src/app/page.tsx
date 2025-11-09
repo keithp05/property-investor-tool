@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Home, TrendingUp, AlertTriangle, Wrench, DollarSign, Users, Calendar, Bell, Loader2, RefreshCw } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { Home, TrendingUp, AlertTriangle, Wrench, DollarSign, Users, Calendar, Bell, Loader2, RefreshCw, BarChart3, FileText, Building2 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Alert {
   type: 'maintenance' | 'rent' | 'vacancy' | 'mortgage';
@@ -53,13 +55,19 @@ interface DashboardData {
 }
 
 export default function HomePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    if (status === 'authenticated') {
+      loadDashboard();
+    } else if (status === 'unauthenticated') {
+      setLoading(false);
+    }
+  }, [status]);
 
   async function loadDashboard() {
     try {
@@ -79,7 +87,12 @@ export default function HomePage() {
     }
   }
 
-  if (loading) {
+  // Show landing page if not authenticated
+  if (status === 'unauthenticated' || (status === 'loading' && !session)) {
+    return <LandingPage />;
+  }
+
+  if (loading || status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -269,6 +282,137 @@ function StatCard({
       <h3 className="text-sm font-medium text-gray-600 mb-1">{title}</h3>
       <p className="text-3xl font-bold text-gray-900">{value}</p>
       {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
+    </div>
+  );
+}
+
+// Landing Page Component
+function LandingPage() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      {/* Navigation */}
+      <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-8 w-8 text-indigo-600" />
+              <span className="text-2xl font-bold text-gray-900">RentalIQ</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/login"
+                className="px-4 py-2 text-gray-700 hover:text-indigo-600 font-medium"
+              >
+                Login
+              </Link>
+              <Link
+                href="/signup"
+                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+              >
+                Get Started
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="text-center mb-16">
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+            Intelligent Property Management
+            <span className="block text-indigo-600 mt-2">Made Simple</span>
+          </h1>
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
+            Streamline your rental portfolio with AI-powered insights, automated workflows, and real-time property analytics
+          </p>
+          <div className="flex justify-center gap-4">
+            <Link
+              href="/signup"
+              className="px-8 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold text-lg shadow-lg hover:shadow-xl transition-all"
+            >
+              Start Free Trial
+            </Link>
+            <Link
+              href="/login"
+              className="px-8 py-4 bg-white text-indigo-600 border-2 border-indigo-600 rounded-lg hover:bg-indigo-50 font-semibold text-lg"
+            >
+              Sign In
+            </Link>
+          </div>
+        </div>
+
+        {/* Features Grid */}
+        <div className="grid md:grid-cols-3 gap-8 mt-20">
+          <FeatureCard
+            icon={<BarChart3 className="h-8 w-8 text-indigo-600" />}
+            title="AI-Powered Analytics"
+            description="Get instant property valuations, market rent analysis, and investment insights powered by AI"
+          />
+          <FeatureCard
+            icon={<DollarSign className="h-8 w-8 text-green-600" />}
+            title="Financial Intelligence"
+            description="Track equity, cash flow, and ROI across your entire portfolio in real-time"
+          />
+          <FeatureCard
+            icon={<Users className="h-8 w-8 text-purple-600" />}
+            title="Tenant Management"
+            description="Automate leases, collect rent, and manage maintenance requests seamlessly"
+          />
+          <FeatureCard
+            icon={<FileText className="h-8 w-8 text-blue-600" />}
+            title="Section 8 Ready"
+            description="Integrated HUD Fair Market Rent data and Section 8 contact information"
+          />
+          <FeatureCard
+            icon={<Wrench className="h-8 w-8 text-orange-600" />}
+            title="Maintenance Tracking"
+            description="Never miss a maintenance request with smart alerts and automated workflows"
+          />
+          <FeatureCard
+            icon={<TrendingUp className="h-8 w-8 text-teal-600" />}
+            title="Market Insights"
+            description="Stay ahead with Zillow integration and real-time market data analysis"
+          />
+        </div>
+
+        {/* CTA Section */}
+        <div className="mt-20 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-12 text-center text-white shadow-2xl">
+          <h2 className="text-3xl font-bold mb-4">Ready to Transform Your Property Management?</h2>
+          <p className="text-xl mb-8 text-indigo-100">
+            Join landlords who are saving time and maximizing profits with RentalIQ
+          </p>
+          <Link
+            href="/signup"
+            className="inline-block px-8 py-4 bg-white text-indigo-600 rounded-lg hover:bg-gray-100 font-semibold text-lg shadow-lg"
+          >
+            Get Started Free
+          </Link>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-gray-400 py-12 mt-20">
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Building2 className="h-6 w-6 text-indigo-400" />
+            <span className="text-xl font-bold text-white">RentalIQ</span>
+          </div>
+          <p className="text-sm">
+            © 2024 RentalIQ. All rights reserved. | Professional Property Management Platform
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+  return (
+    <div className="bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow border border-gray-100">
+      <div className="mb-4">{icon}</div>
+      <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
+      <p className="text-gray-600">{description}</p>
     </div>
   );
 }
