@@ -35,6 +35,7 @@ model User {
   sessions      Session[]
   landlordProfile LandlordProfile?
   tenantProfile   TenantProfile?
+  tenantApplications TenantApplication[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -202,6 +203,7 @@ model Property {
   photos          PropertyPhoto[]
   maintenanceRequests MaintenanceRequest[]
   rentPayments    RentPayment[]
+  tenantApplications TenantApplication[]
   weatherData     WeatherData[]
 
   createdAt       DateTime @default(now())
@@ -503,4 +505,111 @@ enum RequestStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+// ============================================================================
+// TENANT APPLICATIONS
+// ============================================================================
+
+enum ApplicationStatus {
+  PENDING
+  SUBMITTED
+  REVIEWING
+  APPROVED
+  DENIED
+}
+
+model TenantApplication {
+  id                  String            @id @default(cuid())
+  propertyId          String
+  landlordId          String
+  applicationLink     String            @unique
+  status              ApplicationStatus @default(PENDING)
+
+  // Primary Applicant Info
+  fullName            String?
+  email               String?
+  phone               String?
+  dateOfBirth         DateTime?
+  ssn                 String?
+
+  // Current Employment
+  employerName        String?
+  employerPhone       String?
+  jobTitle            String?
+  monthlyIncome       Float?
+  employmentStartDate DateTime?
+
+  // Previous Employment (if less than 2 years)
+  previousEmployerName        String?
+  previousEmployerPhone       String?
+  previousJobTitle            String?
+  previousEmploymentStartDate DateTime?
+  previousEmploymentEndDate   DateTime?
+
+  // References
+  reference1Name         String?
+  reference1Phone        String?
+  reference1Relationship String?
+  reference2Name         String?
+  reference2Phone        String?
+  reference2Relationship String?
+
+  // Current Address
+  currentAddress       String?
+  currentCity          String?
+  currentState         String?
+  currentZip           String?
+  currentLandlord      String?
+  currentLandlordPhone String?
+  currentMonthlyRent   Float?
+  currentMoveInDate    DateTime?
+
+  // Previous Address (if less than 2 years at current)
+  previousAddress       String?
+  previousCity          String?
+  previousState         String?
+  previousZip           String?
+  previousLandlord      String?
+  previousLandlordPhone String?
+
+  // Pets
+  hasPets    Boolean @default(false)
+  petDetails Json?
+
+  // Additional Occupants
+  additionalOccupants Json?
+
+  // Second Applicant
+  hasSecondApplicant Boolean @default(false)
+  secondApplicantInfo Json?
+
+  // Documents
+  payStubsUrls  String[]
+  idDocumentUrl String?
+
+  // Screening Results
+  creditCheckId            String?
+  creditScore              Int?
+  creditReportUrl          String?
+  backgroundCheckId        String?
+  backgroundCheckStatus    String?
+  backgroundCheckReportUrl String?
+
+  // Payment
+  applicationFee         Float   @default(50.00)
+  applicationFeePaid     Boolean @default(false)
+  stripePaymentIntentId  String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  submittedAt DateTime?
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  landlord User     @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([landlordId])
+  @@index([applicationLink])
 }
