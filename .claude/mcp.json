@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://rentaliq_admin:vH%5D%3A%29Qr8OgebcgIC%3F%28J%3FaGloBWMpw8q%24@rentaliq-lab-db.ccd0y2cs49a2.us-east-1.rds.amazonaws.com:5432/rentaliq"]
+    },
+    "aws": {
+      "command": "npx",
+      "args": ["-y", "@aws-sdk/mcp-server-aws"]
+    }
+  }
+}

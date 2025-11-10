@@ -7,7 +7,7 @@
 resource "aws_s3_bucket" "rentaliq" {
   for_each = toset(var.environments)
 
-  bucket = "${var.project_name}-${each.key}-files"
+  bucket = "${lower(var.project_name)}-${each.key}-files"
 
   tags = {
     Name        = "${var.project_name}-${each.key}-files"
@@ -175,7 +175,7 @@ resource "aws_s3_bucket_intelligent_tiering_configuration" "rentaliq" {
 
 # Create logging bucket
 resource "aws_s3_bucket" "logs" {
-  bucket = "${var.project_name}-access-logs"
+  bucket = "${lower(var.project_name)}-access-logs"
 
   tags = {
     Name    = "${var.project_name}-access-logs"

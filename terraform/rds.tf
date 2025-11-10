@@ -34,7 +34,7 @@ data "aws_subnets" "database" {
 resource "aws_db_subnet_group" "rentaliq" {
   for_each = toset(var.environments)
 
-  name       = "${var.project_name}-${each.key}-db-subnet-group"
+  name       = "${lower(var.project_name)}-${each.key}-db-subnet-group"
   subnet_ids = data.aws_subnets.database.ids
 
   tags = {
@@ -47,38 +47,42 @@ resource "aws_db_subnet_group" "rentaliq" {
 # RDS Parameter Group
 # ========================================
 
-resource "aws_db_parameter_group" "rentaliq" {
-  for_each = toset(var.environments)
+# Commented out temporarily - using default parameter group
+# Custom parameters can be added later after RDS is created
 
-  name   = "${var.project_name}-${each.key}-pg15-params"
-  family = "postgres15"
-
-  # Performance tuning parameters
-  parameter {
-    name  = "shared_preload_libraries"
-    value = "pg_stat_statements"
-  }
-
-  parameter {
-    name  = "log_statement"
-    value = "all"
-  }
-
-  parameter {
-    name  = "log_min_duration_statement"
-    value = "1000" # Log queries taking more than 1 second
-  }
-
-  parameter {
-    name  = "max_connections"
-    value = each.key == "prod" ? "200" : "100"
-  }
-
-  tags = {
-    Name        = "${var.project_name}-${each.key}-parameter-group"
-    Environment = each.key
-  }
-}
+# resource "aws_db_parameter_group" "rentaliq" {
+#   for_each = toset(var.environments)
+#
+#   name   = "${lower(var.project_name)}-${each.key}-pg15-params"
+#   family = "postgres15"
+#
+#   # Performance tuning parameters
+#   parameter {
+#     name  = "shared_preload_libraries"
+#     value = "pg_stat_statements"
+#     apply_method = "pending-reboot"  # Static parameter
+#   }
+#
+#   parameter {
+#     name  = "log_statement"
+#     value = "all"
+#   }
+#
+#   parameter {
+#     name  = "log_min_duration_statement"
+#     value = "1000" # Log queries taking more than 1 second
+#   }
+#
+#   parameter {
+#     name  = "max_connections"
+#     value = each.key == "prod" ? "200" : "100"
+#   }
+#
+#   tags = {
+#     Name        = "${var.project_name}-${each.key}-parameter-group"
+#     Environment = each.key
+#   }
+# }
 
 # ========================================
 # RDS PostgreSQL Instances
@@ -88,7 +92,7 @@ resource "aws_db_instance" "rentaliq" {
   for_each = toset(var.environments)
 
   # Instance configuration
-  identifier     = "${var.project_name}-${each.key}-db"
+  identifier     = "${lower(var.project_name)}-${each.key}-db"
   instance_class = var.rds_instance_classes[each.key]
   engine         = "postgres"
   engine_version = var.rds_engine_version
@@ -129,8 +133,8 @@ resource "aws_db_instance" "rentaliq" {
   monitoring_interval                   = each.key == "prod" ? 60 : 0
   monitoring_role_arn                   = each.key == "prod" ? aws_iam_role.rds_monitoring[0].arn : null
 
-  # Parameter group
-  parameter_group_name = aws_db_parameter_group.rentaliq[each.key].name
+  # Parameter group - using default for now
+  # parameter_group_name = aws_db_parameter_group.rentaliq[each.key].name
 
   # Upgrades
   auto_minor_version_upgrade = var.enable_auto_minor_version_upgrade

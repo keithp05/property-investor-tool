@@ -42,6 +42,7 @@ output "rds_database_names" {
 
 output "database_connection_strings" {
   description = "Database connection strings (sensitive - stored in Secrets Manager)"
+  sensitive   = true
   value = {
     for env in var.environments : env => {
       postgresql = "postgresql://${var.rds_username}:***@${aws_db_instance.rentaliq[env].address}:${aws_db_instance.rentaliq[env].port}/${var.rds_db_name}"
