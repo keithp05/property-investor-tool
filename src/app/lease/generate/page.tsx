@@ -1,11 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Download, Loader2 } from 'lucide-react';
+
+interface Tenant {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  property: {
+    id: string;
+    address: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    fullAddress: string;
+  };
+  lease: {
+    startDate: string;
+    endDate: string;
+    monthlyRent: number;
+    securityDeposit: number;
+    signed: boolean;
+  };
+}
 
 export default function LeaseGeneratorPage() {
   const [loading, setLoading] = useState(false);
+  const [loadingTenants, setLoadingTenants] = useState(true);
   const [generatedLease, setGeneratedLease] = useState('');
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState('');
   const [formData, setFormData] = useState({
     // Property Details
     propertyAddress: '',
@@ -37,6 +62,44 @@ export default function LeaseGeneratorPage() {
     lateFeeAmount: '',
     lateFeeGracePeriod: '5',
   });
+
+  // Fetch tenants on mount
+  useEffect(() => {
+    const fetchTenants = async () => {
+      try {
+        const response = await fetch('/api/tenants');
+        const data = await response.json();
+        if (data.success) {
+          setTenants(data.tenants);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tenants:', error);
+      } finally {
+        setLoadingTenants(false);
+      }
+    };
+
+    fetchTenants();
+  }, []);
+
+  // Handle tenant selection
+  const handleTenantSelect = (tenantId: string) => {
+    setSelectedTenantId(tenantId);
+    const selectedTenant = tenants.find(t => t.id === tenantId);
+
+    if (selectedTenant) {
+      setFormData(prev => ({
+        ...prev,
+        tenantName: selectedTenant.name,
+        tenantEmail: selectedTenant.email,
+        tenantPhone: selectedTenant.phone || '',
+        propertyAddress: selectedTenant.property.address,
+        city: selectedTenant.property.city,
+        state: selectedTenant.property.state,
+        zipCode: selectedTenant.property.zipCode,
+      }));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,30 +324,63 @@ export default function LeaseGeneratorPage() {
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">Tenant Details</h2>
                   <div className="space-y-4">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Full Name"
-                      value={formData.tenantName}
-                      onChange={(e) => setFormData({ ...formData, tenantName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <input
-                      type="email"
-                      required
-                      placeholder="Email"
-                      value={formData.tenantEmail}
-                      onChange={(e) => setFormData({ ...formData, tenantEmail: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <input
-                      type="tel"
-                      required
-                      placeholder="Phone"
-                      value={formData.tenantPhone}
-                      onChange={(e) => setFormData({ ...formData, tenantPhone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
+                    {loadingTenants ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                      </div>
+                    ) : tenants.length > 0 ? (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Select Tenant *
+                          </label>
+                          <select
+                            required
+                            value={selectedTenantId}
+                            onChange={(e) => handleTenantSelect(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">-- Select a tenant --</option>
+                            {tenants.map((tenant) => (
+                              <option key={tenant.id} value={tenant.id}>
+                                {tenant.name} - {tenant.property.fullAddress}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {selectedTenantId && (
+                          <>
+                            <input
+                              type="text"
+                              value={formData.tenantName}
+                              onChange={(e) => setFormData({ ...formData, tenantName: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50"
+                              placeholder="Tenant Name"
+                            />
+                            <input
+                              type="email"
+                              value={formData.tenantEmail}
+                              onChange={(e) => setFormData({ ...formData, tenantEmail: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50"
+                              placeholder="Email"
+                            />
+                            <input
+                              type="tel"
+                              value={formData.tenantPhone}
+                              onChange={(e) => setFormData({ ...formData, tenantPhone: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50"
+                              placeholder="Phone"
+                            />
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+                        <p className="text-gray-500 text-sm">
+                          No tenants found. Please add tenants first.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
