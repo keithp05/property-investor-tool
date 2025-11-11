@@ -37,7 +37,6 @@ export default function MyPropertiesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [searchAddress, setSearchAddress] = useState('');
 
   const [newProperty, setNewProperty] = useState({
     address: '',
@@ -79,50 +78,6 @@ export default function MyPropertiesPage() {
       console.error('Error fetching properties:', error);
     } finally {
       setInitialLoading(false);
-    }
-  };
-
-  const handleSearchProperty = async () => {
-    if (!searchAddress.trim()) {
-      alert('Please enter an address to search');
-      return;
-    }
-
-    setLoading(true);
-    setFetchedPropertyDetails(null);
-
-    try {
-      // Search Zillow for property details
-      const response = await fetch('/api/properties/lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: searchAddress }),
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.property) {
-        // Auto-populate form with fetched data
-        setNewProperty({
-          ...newProperty,
-          address: data.property.address,
-          city: data.property.city,
-          state: data.property.state,
-          zipCode: data.property.zipCode,
-        });
-
-        // Store full property details for display
-        setFetchedPropertyDetails(data.property);
-
-        alert('✅ Property found! Review the details below and add your purchase information.');
-      } else {
-        alert(data.error || 'Property not found. Please enter details manually.');
-      }
-    } catch (error) {
-      console.error('Property lookup error:', error);
-      alert('Failed to fetch property details. Please enter manually.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -374,48 +329,10 @@ export default function MyPropertiesPage() {
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-2xl font-bold text-gray-900">Add Property</h2>
-              <p className="text-gray-600 mt-1">Search by address to auto-fill property details</p>
+              <p className="text-gray-600 mt-1">Start typing an address below to auto-fill property details from Zillow</p>
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Address Search with Autocomplete */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Search Property Address (Optional)
-                </label>
-                <div className="flex gap-2">
-                  <AddressAutocomplete
-                    value={searchAddress}
-                    onChange={setSearchAddress}
-                    onSelect={(suggestion) => {
-                      // Automatically search when an address is selected
-                      setSearchAddress(suggestion.description);
-                      // Trigger search after a brief delay to allow state update
-                      setTimeout(() => {
-                        handleSearchProperty();
-                      }, 100);
-                    }}
-                    placeholder="Start typing an address..."
-                    className="flex-1"
-                  />
-                  <button
-                    onClick={handleSearchProperty}
-                    disabled={loading || !searchAddress}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400"
-                  >
-                    {loading ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Search className="h-5 w-5" />
-                    )}
-                    Search
-                  </button>
-                </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  Search Zillow for property details, or skip and enter manually below.
-                </p>
-              </div>
-
               {/* Fetched Property Details Preview */}
               {fetchedPropertyDetails && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
