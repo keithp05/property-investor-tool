@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const application = await prisma.tenantApplication.create({
       data: {
         propertyId,
-        landlordId: landlordProfile.id,
+        landlordId: session.user.id, // User ID, not LandlordProfile ID
         applicationLink: uniqueLink,
         status: 'PENDING',
       },
