@@ -104,9 +104,15 @@ export default function MyPropertiesPage() {
           purchaseDate: '',
           monthlyMortgage: '',
           monthlyRent: '',
+          mortgageBalance: '',
+          mortgageRate: '',
+          mortgageTerm: '',
+          lenderName: '',
+          loanNumber: '',
         });
-        setSearchAddress('');
         setFetchedPropertyDetails(null);
+        setCmaAnalysis(null);
+        setSection8Data(null);
       } else {
         alert('Failed to add property: ' + data.error);
       }

@@ -31,7 +31,21 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { address, city, state, zipCode, purchasePrice, purchaseDate, monthlyMortgage, monthlyRent } = body;
+    const {
+      address,
+      city,
+      state,
+      zipCode,
+      purchasePrice,
+      purchaseDate,
+      monthlyMortgage,
+      monthlyRent,
+      mortgageBalance,
+      mortgageRate,
+      mortgageTerm,
+      lenderName,
+      loanNumber
+    } = body;
 
     console.log('📍 Adding landlord property:', address, city, state, zipCode);
 
@@ -105,8 +119,15 @@ export async function POST(request: NextRequest) {
         monthlyMortgage: monthlyMortgage ? parseFloat(monthlyMortgage) : null,
         monthlyRent: monthlyRent ? parseFloat(monthlyRent) : null,
 
-        // Status
-        status: monthlyRent ? 'RENTED' : 'VACANT',
+        // Mortgage details
+        mortgageBalance: mortgageBalance ? parseFloat(mortgageBalance) : null,
+        mortgageRate: mortgageRate ? parseFloat(mortgageRate) : null,
+        mortgageTerm: mortgageTerm ? parseInt(mortgageTerm) * 12 : null, // Convert years to months
+        lenderName: lenderName || null,
+        loanNumber: loanNumber || null,
+
+        // Status - Always VACANT until tenant is assigned
+        status: 'VACANT',
       },
     });
 
