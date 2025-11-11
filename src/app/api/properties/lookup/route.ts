@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
+import { freePropertyLookup } from '@/services/freePropertyLookup';
 
 /**
  * Property Lookup Endpoint
- * Searches for a property by address and returns basic details from Zillow
+ * Searches for a property by address using free alternatives first, then paid APIs
  * Used in the landlord property addition flow to auto-populate form fields
  */
 export async function POST(request: NextRequest) {
@@ -19,10 +20,25 @@ export async function POST(request: NextRequest) {
 
     console.log('🔍 Looking up property:', address);
 
+    // FIRST: Try free alternatives (Redfin, Zillow scraping)
+    console.log('🆓 Trying free property lookup sources...');
+    const freeResult = await freePropertyLookup(address);
+
+    if (freeResult) {
+      console.log('✅ Property found using free sources');
+      return NextResponse.json({
+        success: true,
+        property: freeResult,
+        source: 'free',
+      });
+    }
+
+    console.log('⚠️  Free sources failed, trying paid APIs...');
+
     let response: any = null;
     let usingBrightData = false;
 
-    // Try RapidAPI Zillow first
+    // SECOND: Try RapidAPI Zillow
     const statusTypes = ['ForSale', 'RecentlySold', 'ForRent'];
 
     for (const statusType of statusTypes) {
