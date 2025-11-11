@@ -52,6 +52,7 @@ export default function MyPropertiesPage() {
     mortgageTerm: '',
     lenderName: '',
     loanNumber: '',
+    status: 'VACANT' as 'VACANT' | 'MAINTENANCE',
   });
 
   const [fetchedPropertyDetails, setFetchedPropertyDetails] = useState<any>(null);
@@ -109,6 +110,7 @@ export default function MyPropertiesPage() {
           mortgageTerm: '',
           lenderName: '',
           loanNumber: '',
+          status: 'VACANT' as 'VACANT' | 'MAINTENANCE',
         });
         setFetchedPropertyDetails(null);
         setCmaAnalysis(null);
@@ -893,35 +895,54 @@ export default function MyPropertiesPage() {
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-semibold mb-4">Purchase Information</h3>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Price</label>
-                    <input
-                      type="number"
-                      value={newProperty.purchasePrice}
-                      onChange={(e) => setNewProperty({ ...newProperty, purchasePrice: e.target.value })}
-                      placeholder="250000"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Price</label>
+                      <input
+                        type="number"
+                        value={newProperty.purchasePrice}
+                        onChange={(e) => setNewProperty({ ...newProperty, purchasePrice: e.target.value })}
+                        placeholder="250000"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Date</label>
+                      <input
+                        type="date"
+                        value={newProperty.purchaseDate}
+                        onChange={(e) => setNewProperty({ ...newProperty, purchaseDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Date</label>
-                    <input
-                      type="date"
-                      value={newProperty.purchaseDate}
-                      onChange={(e) => setNewProperty({ ...newProperty, purchaseDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Rent</label>
-                    <input
-                      type="number"
-                      value={newProperty.monthlyRent}
-                      onChange={(e) => setNewProperty({ ...newProperty, monthlyRent: e.target.value })}
-                      placeholder="2000"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Rent</label>
+                      <input
+                        type="number"
+                        value={newProperty.monthlyRent}
+                        onChange={(e) => setNewProperty({ ...newProperty, monthlyRent: e.target.value })}
+                        placeholder="2000"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Property Status</label>
+                      <select
+                        value={newProperty.status}
+                        onChange={(e) => setNewProperty({ ...newProperty, status: e.target.value as 'VACANT' | 'MAINTENANCE' })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="VACANT">Vacant</option>
+                        <option value="MAINTENANCE">Maintenance/Remediation</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Status changes to "Rented" when tenant is assigned
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

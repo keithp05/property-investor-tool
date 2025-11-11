@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
       mortgageRate,
       mortgageTerm,
       lenderName,
-      loanNumber
+      loanNumber,
+      status
     } = body;
 
     console.log('📍 Adding landlord property:', address, city, state, zipCode);
@@ -126,8 +127,8 @@ export async function POST(request: NextRequest) {
         lenderName: lenderName || null,
         loanNumber: loanNumber || null,
 
-        // Status - Always VACANT until tenant is assigned
-        status: 'VACANT',
+        // Status - Use provided status (VACANT or MAINTENANCE), defaults to VACANT
+        status: status || 'VACANT',
       },
     });
 
