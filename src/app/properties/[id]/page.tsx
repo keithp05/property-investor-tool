@@ -98,21 +98,27 @@ export default function PropertyDetailsPage() {
   async function generateApplicationLink() {
     try {
       setGeneratingLink(true);
+      console.log('🔗 Generating application link for property:', params.id);
+
       const response = await fetch('/api/applications/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ propertyId: params.id }),
       });
 
+      console.log('📡 Response status:', response.status);
       const result = await response.json();
+      console.log('📦 Response data:', result);
 
       if (result.success) {
         setApplicationLink(result.fullLink);
+        console.log('✅ Application link generated:', result.fullLink);
       } else {
-        alert('Failed to generate link: ' + result.error);
+        console.error('❌ API returned error:', result.error, result.details);
+        alert('Failed to generate link: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Generate link error:', error);
+      console.error('❌ Generate link error:', error);
       alert('Failed to generate application link');
     } finally {
       setGeneratingLink(false);
