@@ -444,18 +444,19 @@ export async function POST(request: NextRequest) {
 
     // Return structured property data
     const property = {
-      address: addressParts,
-      city: cityStateZip.city,
-      state: cityStateZip.state,
-      zipCode: cityStateZip.zipCode,
+      address: zillowData.streetAddress || zillowData.address?.streetAddress || addressParts,
+      city: zillowData.city || zillowData.address?.city || cityStateZip.city,
+      state: zillowData.state || zillowData.address?.state || cityStateZip.state,
+      zipCode: zillowData.zipcode || zillowData.address?.zipcode || cityStateZip.zipCode,
 
       // Basic property details
       bedrooms: zillowData.bedrooms || null,
       bathrooms: zillowData.bathrooms || null,
-      squareFeet: zillowData.livingArea || null,
+      squareFeet: zillowData.livingArea || zillowData.livingAreaValue || null,
       yearBuilt: zillowData.yearBuilt || null,
-      propertyType: zillowData.propertyType || 'SINGLE_FAMILY',
-      estimatedValue: zillowData.price || zillowData.zestimate || null,
+      propertyType: zillowData.homeType || zillowData.propertyType || 'SINGLE_FAMILY',
+      estimatedValue: zillowData.zestimate || zillowData.price || null,
+      rentZestimate: zillowData.rentZestimate || null,
 
       // Additional details from extended API
       ...additionalDetails,

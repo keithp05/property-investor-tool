@@ -243,7 +243,7 @@ export default function PropertySearchPage() {
 
                       if (data.success && data.property) {
                         // Show single property result
-                        setResults([{
+                        setProperties([{
                           id: data.property.zpid || `temp-${Date.now()}`,
                           address: data.property.address,
                           city: data.property.city,
