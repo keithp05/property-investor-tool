@@ -226,9 +226,51 @@ export default function PropertySearchPage() {
                 <AddressAutocomplete
                   value={searchParams.address}
                   onChange={(value) => setSearchParams({ ...searchParams, address: value })}
-                  onSelect={(suggestion) => {
-                    // Parse address to extract city, state, zip from the selected suggestion
+                  onSelect={async (suggestion) => {
+                    // Set the selected address
                     setSearchParams({ ...searchParams, address: suggestion.description });
+
+                    // Automatically search for this specific property
+                    setLoading(true);
+                    try {
+                      const response = await fetch('/api/properties/lookup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address: suggestion.description }),
+                      });
+
+                      const data = await response.json();
+
+                      if (data.success && data.property) {
+                        // Show single property result
+                        setResults([{
+                          id: data.property.zpid || `temp-${Date.now()}`,
+                          address: data.property.address,
+                          city: data.property.city,
+                          state: data.property.state,
+                          zipCode: data.property.zipCode,
+                          bedrooms: data.property.bedrooms,
+                          bathrooms: data.property.bathrooms,
+                          squareFeet: data.property.squareFeet,
+                          yearBuilt: data.property.yearBuilt,
+                          propertyType: data.property.propertyType || 'SINGLE_FAMILY',
+                          currentValue: data.property.estimatedValue || data.property.zestimate,
+                          monthlyRent: data.property.rentZestimate,
+                          marketRent: data.property.marketRent,
+                          estimatedValue: data.property.estimatedValue || data.property.zestimate,
+                          status: 'AVAILABLE',
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                        }]);
+                      } else {
+                        alert('Property details not found. Try a broader search using city or ZIP code.');
+                      }
+                    } catch (error) {
+                      console.error('Property lookup error:', error);
+                      alert('Failed to fetch property details. Try a broader search.');
+                    } finally {
+                      setLoading(false);
+                    }
                   }}
                   placeholder="Start typing an address (e.g., 123 Main St...)"
                 />

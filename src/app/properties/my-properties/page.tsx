@@ -578,13 +578,36 @@ export default function MyPropertiesPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-                    <input
-                      type="text"
+                    <AddressAutocomplete
                       value={newProperty.address}
-                      onChange={(e) => setNewProperty({ ...newProperty, address: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                      required
-                      placeholder="123 Main St"
+                      onChange={(value) => setNewProperty({ ...newProperty, address: value })}
+                      onSelect={(suggestion) => {
+                        // Parse the address to extract components
+                        const fullAddress = suggestion.description;
+                        const parts = fullAddress.split(', ');
+
+                        // Extract city, state, zip from the address
+                        let city = '';
+                        let state = '';
+                        let zipCode = '';
+
+                        if (parts.length >= 3) {
+                          city = parts[parts.length - 3] || '';
+                          const stateZip = parts[parts.length - 2] || '';
+                          const stateZipParts = stateZip.split(' ');
+                          state = stateZipParts[0] || '';
+                          zipCode = stateZipParts[1] || '';
+                        }
+
+                        setNewProperty({
+                          ...newProperty,
+                          address: parts[0] || fullAddress,
+                          city: city,
+                          state: state,
+                          zipCode: zipCode,
+                        });
+                      }}
+                      placeholder="Start typing address..."
                     />
                   </div>
 
