@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, MapPin, DollarSign, Home, TrendingUp, Navigation } from 'lucide-react';
+import AddressAutocomplete from '@/components/AddressAutocomplete';
 
 export default function PropertySearchPage() {
   const router = useRouter();
@@ -222,12 +223,14 @@ export default function PropertySearchPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Full Address
                 </label>
-                <input
-                  type="text"
+                <AddressAutocomplete
                   value={searchParams.address}
-                  onChange={(e) => setSearchParams({ ...searchParams, address: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="123 Main St, Austin, TX 78701"
+                  onChange={(value) => setSearchParams({ ...searchParams, address: value })}
+                  onSelect={(suggestion) => {
+                    // Parse address to extract city, state, zip from the selected suggestion
+                    setSearchParams({ ...searchParams, address: suggestion.description });
+                  }}
+                  placeholder="Start typing an address (e.g., 123 Main St...)"
                 />
               </div>
             )}
