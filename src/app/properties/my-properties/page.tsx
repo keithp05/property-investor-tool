@@ -56,6 +56,9 @@ export default function MyPropertiesPage() {
   });
 
   const [fetchedPropertyDetails, setFetchedPropertyDetails] = useState<any>(null);
+  const [cmaAnalysis, setCmaAnalysis] = useState<any>(null);
+  const [section8Data, setSection8Data] = useState<any>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
 
   // Fetch properties on mount
   useEffect(() => {
@@ -572,6 +575,232 @@ export default function MyPropertiesPage() {
                 </div>
               )}
 
+              {/* Comprehensive Property Analysis */}
+              {analysisLoading && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                  <Loader2 className="h-8 w-8 text-blue-600 animate-spin mx-auto mb-2" />
+                  <p className="text-blue-900 font-semibold">Generating Comprehensive Analysis...</p>
+                  <p className="text-sm text-blue-700 mt-1">CMA, Area Rents, Section 8 Data</p>
+                </div>
+              )}
+
+              {/* CMA Analysis */}
+              {cmaAnalysis && cmaAnalysis.cma && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-purple-900 flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5" />
+                      Comparative Market Analysis (CMA)
+                    </h3>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      cmaAnalysis.cma.confidence === 'High' ? 'bg-green-100 text-green-800' :
+                      cmaAnalysis.cma.confidence === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {cmaAnalysis.cma.confidence} Confidence
+                    </span>
+                  </div>
+
+                  {/* Estimated Value */}
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="bg-white rounded-lg p-3 border border-purple-200">
+                      <p className="text-xs text-gray-600 mb-1">Estimated Value</p>
+                      <p className="text-2xl font-bold text-purple-700">
+                        ${cmaAnalysis.cma.estimatedValue.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        ${cmaAnalysis.cma.valueLow.toLocaleString()} - ${cmaAnalysis.cma.valueHigh.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-purple-200">
+                      <p className="text-xs text-gray-600 mb-1">Estimated Rent</p>
+                      <p className="text-2xl font-bold text-green-700">
+                        ${cmaAnalysis.cma.estimatedRent.toLocaleString()}/mo
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        ${cmaAnalysis.cma.rentLow.toLocaleString()} - ${cmaAnalysis.cma.rentHigh.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-purple-200">
+                      <p className="text-xs text-gray-600 mb-1">Price per Sq Ft</p>
+                      <p className="text-2xl font-bold text-indigo-700">
+                        ${cmaAnalysis.cma.pricePerSqFt}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Rent: ${cmaAnalysis.cma.rentPerSqFt}/sq ft
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Market Trend */}
+                  <div className="bg-white rounded-lg p-3 border border-purple-200 mb-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Market Trend</span>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        cmaAnalysis.cma.marketTrend === 'Appreciating' ? 'bg-green-100 text-green-800' :
+                        cmaAnalysis.cma.marketTrend === 'Stable' ? 'bg-blue-100 text-blue-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {cmaAnalysis.cma.marketTrend === 'Appreciating' ? '⬆️' :
+                         cmaAnalysis.cma.marketTrend === 'Stable' ? '➡️' : '⬇️'} {cmaAnalysis.cma.marketTrend}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Insights */}
+                  {cmaAnalysis.cma.insights && cmaAnalysis.cma.insights.length > 0 && (
+                    <div className="bg-white rounded-lg p-3 border border-purple-200">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Key Insights</p>
+                      <ul className="space-y-1">
+                        {cmaAnalysis.cma.insights.map((insight: string, idx: number) => (
+                          <li key={idx} className="text-xs text-gray-600 flex items-start gap-2">
+                            <span className="text-purple-600 mt-0.5">•</span>
+                            <span>{insight}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500 mt-3">
+                    Based on {cmaAnalysis.cma.comparableCount} comparable properties
+                  </p>
+                </div>
+              )}
+
+              {/* Area Rent Analysis */}
+              {cmaAnalysis && cmaAnalysis.areaRents && cmaAnalysis.areaRents.sampleSize > 0 && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
+                  <h3 className="text-lg font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Area Rent Analysis
+                  </h3>
+
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="bg-white rounded-lg p-3 border border-indigo-200">
+                      <p className="text-xs text-gray-600 mb-1">Average Rent</p>
+                      <p className="text-lg font-bold text-indigo-700">
+                        ${cmaAnalysis.areaRents.averageRent.toLocaleString()}/mo
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-indigo-200">
+                      <p className="text-xs text-gray-600 mb-1">Median Rent</p>
+                      <p className="text-lg font-bold text-indigo-700">
+                        ${cmaAnalysis.areaRents.medianRent.toLocaleString()}/mo
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-indigo-200">
+                      <p className="text-xs text-gray-600 mb-1">Low Range</p>
+                      <p className="text-lg font-bold text-gray-700">
+                        ${cmaAnalysis.areaRents.rentLow.toLocaleString()}/mo
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-indigo-200">
+                      <p className="text-xs text-gray-600 mb-1">High Range</p>
+                      <p className="text-lg font-bold text-gray-700">
+                        ${cmaAnalysis.areaRents.rentHigh.toLocaleString()}/mo
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-3">
+                    Based on {cmaAnalysis.areaRents.sampleSize} rental listings • Sources: {cmaAnalysis.areaRents.sources.join(', ')}
+                  </p>
+                </div>
+              )}
+
+              {/* Section 8 FMR Analysis */}
+              {section8Data && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-5">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-3 flex items-center gap-2">
+                    <Home className="h-5 w-5" />
+                    Section 8 Fair Market Rent (FMR)
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="bg-white rounded-lg p-3 border border-orange-200">
+                      <p className="text-xs text-gray-600 mb-1">
+                        FMR for {section8Data.fmr && fetchedPropertyDetails?.bedrooms} Bedroom
+                      </p>
+                      <p className="text-2xl font-bold text-orange-700">
+                        ${section8Data.fmrForBedrooms.toLocaleString()}/mo
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {section8Data.percentile}th Percentile • {section8Data.year}
+                      </p>
+                    </div>
+
+                    {/* Section 8 Eligibility */}
+                    {cmaAnalysis && cmaAnalysis.cma && (
+                      <div className="bg-white rounded-lg p-3 border border-orange-200">
+                        <p className="text-xs text-gray-600 mb-1">Section 8 Eligibility</p>
+                        {cmaAnalysis.cma.estimatedRent <= section8Data.fmrForBedrooms ? (
+                          <>
+                            <p className="text-2xl font-bold text-green-700">✓ Eligible</p>
+                            <p className="text-xs text-green-600 mt-1">
+                              Rent is within FMR limits
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-2xl font-bold text-red-700">✗ Not Eligible</p>
+                            <p className="text-xs text-red-600 mt-1">
+                              ${(cmaAnalysis.cma.estimatedRent - section8Data.fmrForBedrooms).toLocaleString()} over FMR
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* All FMR Rates */}
+                  <div className="bg-white rounded-lg p-3 border border-orange-200 mb-3">
+                    <p className="text-sm font-medium text-gray-700 mb-2">FMR by Bedroom Count</p>
+                    <div className="grid grid-cols-5 gap-2 text-xs">
+                      <div>
+                        <p className="text-gray-600">Studio</p>
+                        <p className="font-semibold">${section8Data.fmr.studio}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">1 BR</p>
+                        <p className="font-semibold">${section8Data.fmr.oneBedroom}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">2 BR</p>
+                        <p className="font-semibold">${section8Data.fmr.twoBedroom}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">3 BR</p>
+                        <p className="font-semibold">${section8Data.fmr.threeBedroom}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">4 BR</p>
+                        <p className="font-semibold">${section8Data.fmr.fourBedroom}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Housing Authority Info */}
+                  <div className="bg-white rounded-lg p-3 border border-orange-200">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Housing Authority</p>
+                    <p className="text-xs text-gray-600 mb-1">{section8Data.housingAuthorityName}</p>
+                    <p className="text-xs text-gray-600">
+                      Area: {section8Data.metroArea || section8Data.county}
+                    </p>
+                    {section8Data.housingAuthorityWebsite && (
+                      <a
+                        href={section8Data.housingAuthorityWebsite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-orange-600 hover:text-orange-800 underline mt-2 inline-block"
+                      >
+                        View Housing Authority Resources →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-semibold mb-4">Property Details</h3>
 
@@ -581,31 +810,119 @@ export default function MyPropertiesPage() {
                     <AddressAutocomplete
                       value={newProperty.address}
                       onChange={(value) => setNewProperty({ ...newProperty, address: value })}
-                      onSelect={(suggestion) => {
-                        // Parse the address to extract components
-                        const fullAddress = suggestion.description;
-                        const parts = fullAddress.split(', ');
+                      onSelect={async (suggestion) => {
+                        // Set loading state
+                        setLoading(true);
+                        setFetchedPropertyDetails(null);
+                        setCmaAnalysis(null);
+                        setSection8Data(null);
 
-                        // Extract city, state, zip from the address
-                        let city = '';
-                        let state = '';
-                        let zipCode = '';
+                        try {
+                          // Fetch full property details from Zillow
+                          const response = await fetch('/api/properties/lookup', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ address: suggestion.description }),
+                          });
 
-                        if (parts.length >= 3) {
-                          city = parts[parts.length - 3] || '';
-                          const stateZip = parts[parts.length - 2] || '';
-                          const stateZipParts = stateZip.split(' ');
-                          state = stateZipParts[0] || '';
-                          zipCode = stateZipParts[1] || '';
+                          const data = await response.json();
+
+                          if (data.success && data.property) {
+                            // Auto-populate ALL property fields
+                            setNewProperty({
+                              ...newProperty,
+                              address: data.property.address,
+                              city: data.property.city,
+                              state: data.property.state,
+                              zipCode: data.property.zipCode,
+                            });
+
+                            // Store full property details for display
+                            setFetchedPropertyDetails(data.property);
+
+                            // Fetch comprehensive analysis in background
+                            setAnalysisLoading(true);
+
+                            // Fetch CMA and Section 8 data in parallel
+                            const [cmaResponse, section8Response] = await Promise.allSettled([
+                              fetch('/api/properties/cma', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  address: data.property.address,
+                                  city: data.property.city,
+                                  state: data.property.state,
+                                  zipCode: data.property.zipCode,
+                                  bedrooms: data.property.bedrooms,
+                                  bathrooms: data.property.bathrooms,
+                                  squareFeet: data.property.squareFeet,
+                                  yearBuilt: data.property.yearBuilt,
+                                  propertyType: data.property.propertyType,
+                                }),
+                              }),
+                              fetch('/api/section8/fmr', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  zipCode: data.property.zipCode,
+                                  bedrooms: data.property.bedrooms || 3,
+                                }),
+                              }),
+                            ]);
+
+                            // Process CMA response
+                            if (cmaResponse.status === 'fulfilled') {
+                              const cmaData = await cmaResponse.value.json();
+                              if (cmaData.success) {
+                                setCmaAnalysis(cmaData);
+                              }
+                            }
+
+                            // Process Section 8 response
+                            if (section8Response.status === 'fulfilled') {
+                              const s8Data = await section8Response.value.json();
+                              if (s8Data.success) {
+                                setSection8Data(s8Data.data);
+                              }
+                            }
+
+                            setAnalysisLoading(false);
+
+                            alert('✅ Property details loaded! Comprehensive analysis generated below.');
+                          } else {
+                            // Fallback: Just parse address components
+                            const fullAddress = suggestion.description;
+                            const parts = fullAddress.split(', ');
+
+                            let city = '';
+                            let state = '';
+                            let zipCode = '';
+
+                            if (parts.length >= 3) {
+                              city = parts[parts.length - 3] || '';
+                              const stateZip = parts[parts.length - 2] || '';
+                              const stateZipParts = stateZip.split(' ');
+                              state = stateZipParts[0] || '';
+                              zipCode = stateZipParts[1] || '';
+                            }
+
+                            setNewProperty({
+                              ...newProperty,
+                              address: parts[0] || fullAddress,
+                              city: city,
+                              state: state,
+                              zipCode: zipCode,
+                            });
+
+                            alert('Property not found on Zillow. Please enter details manually.');
+                          }
+                        } catch (error) {
+                          console.error('Property lookup error:', error);
+                          alert('Failed to fetch property details. Please enter manually.');
+                          setAnalysisLoading(false);
+                        } finally {
+                          setLoading(false);
                         }
-
-                        setNewProperty({
-                          ...newProperty,
-                          address: parts[0] || fullAddress,
-                          city: city,
-                          state: state,
-                          zipCode: zipCode,
-                        });
                       }}
                       placeholder="Start typing address..."
                     />

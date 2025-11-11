@@ -68,6 +68,16 @@ export async function GET(request: NextRequest) {
       // Tenant is active if tenancy exists and lease hasn't expired
       const isActive = tenancy && new Date(tenancy.leaseEndDate) > new Date();
 
+      // Calculate actual status based on tenancy
+      // Only show RENTED if there's an active tenant with a valid lease
+      let actualStatus = property.status;
+      if (isActive) {
+        actualStatus = 'RENTED';
+      } else if (!isActive && property.status === 'RENTED') {
+        // If marked as RENTED but no active tenancy, mark as VACANT
+        actualStatus = 'VACANT';
+      }
+
       return {
         id: property.id,
         address: property.address,
@@ -84,7 +94,7 @@ export async function GET(request: NextRequest) {
         purchaseDate: property.purchaseDate?.toISOString().split('T')[0],
         monthlyMortgage: property.monthlyMortgage ? parseFloat(property.monthlyMortgage.toString()) : null,
         monthlyRent: property.monthlyRent ? parseFloat(property.monthlyRent.toString()) : null,
-        status: property.status,
+        status: actualStatus,
         currentTenant: isActive && tenancy ? tenancy.tenantProfile.user.name : null,
         leaseEndDate: isActive && tenancy?.leaseEndDate ? tenancy.leaseEndDate.toISOString().split('T')[0] : null,
       };
