@@ -142,22 +142,28 @@ export default function TenantsPage() {
 
     try {
       setGenerating(true);
+      console.log('🔗 Generating application link for property:', selectedPropertyId);
+
       const response = await fetch('/api/applications/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ propertyId: selectedPropertyId }),
       });
 
+      console.log('📡 Response status:', response.status);
       const data = await response.json();
+      console.log('📦 Response data:', data);
 
       if (data.success) {
         setGeneratedLink(data.fullLink);
         fetchApplications(); // Refresh applications list
+        console.log('✅ Application link generated:', data.fullLink);
       } else {
-        alert('Failed to generate link: ' + data.error);
+        console.error('❌ API returned error:', data.error, data.details);
+        alert('Failed to generate link: ' + (data.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Generate link error:', error);
+      console.error('❌ Generate link error:', error);
       alert('Failed to generate application link');
     } finally {
       setGenerating(false);
