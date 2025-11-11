@@ -734,7 +734,9 @@ export default function MyPropertiesPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
                     <AddressAutocomplete
                       value={newProperty.address}
-                      onChange={(value) => setNewProperty({ ...newProperty, address: value })}
+                      onChange={(value) => {
+                        setNewProperty(prev => ({ ...prev, address: value }));
+                      }}
                       onSelect={async (suggestion) => {
                         // Set loading state
                         setLoading(true);
@@ -798,22 +800,40 @@ export default function MyPropertiesPage() {
                             // Process CMA response
                             if (cmaResponse.status === 'fulfilled') {
                               const cmaData = await cmaResponse.value.json();
+                              console.log('CMA Response:', cmaData);
                               if (cmaData.success) {
                                 setCmaAnalysis(cmaData);
+                                console.log('✅ CMA Analysis set');
+                              } else {
+                                console.warn('CMA API returned success: false', cmaData.error);
                               }
+                            } else {
+                              console.error('CMA API call failed:', cmaResponse.reason);
                             }
 
                             // Process Section 8 response
                             if (section8Response.status === 'fulfilled') {
                               const s8Data = await section8Response.value.json();
+                              console.log('Section 8 Response:', s8Data);
                               if (s8Data.success) {
                                 setSection8Data(s8Data.data);
+                                console.log('✅ Section 8 data set');
+                              } else {
+                                console.warn('Section 8 API returned success: false', s8Data.error);
                               }
+                            } else {
+                              console.error('Section 8 API call failed:', section8Response.reason);
                             }
 
                             setAnalysisLoading(false);
 
-                            alert('✅ Property details loaded! Comprehensive analysis generated below.');
+                            // Show success message and scroll to analysis
+                            const analysisCount = (cmaResponse.status === 'fulfilled' ? 1 : 0) + (section8Response.status === 'fulfilled' ? 1 : 0);
+                            if (analysisCount > 0) {
+                              alert(`✅ Property details loaded! Scroll down to see ${analysisCount === 2 ? 'CMA and Section 8' : 'property'} analysis.`);
+                            } else {
+                              alert('✅ Property details loaded! (Note: Analysis data unavailable)');
+                            }
                           } else {
                             // Fallback: Just parse address components
                             const fullAddress = suggestion.description;
