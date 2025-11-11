@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
     PLAID_CLIENT_ID: process.env.PLAID_CLIENT_ID,
     PLAID_SECRET: process.env.PLAID_SECRET,
     PLAID_ENV: process.env.PLAID_ENV,
+    ZILLOW_API_KEY: process.env.ZILLOW_API_KEY,
+    BRIGHT_DATA_API_TOKEN: process.env.BRIGHT_DATA_API_TOKEN,
+    BRIGHT_DATA_DATASET_ID: process.env.BRIGHT_DATA_DATASET_ID,
   },
   eslint: {
     // Warning: This allows production builds to successfully complete even if
