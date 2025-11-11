@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Home, MapPin, DollarSign, Calendar, Users, Wrench, ArrowLeft, TrendingUp, Loader2, Edit3, X } from 'lucide-react';
+import { Home, MapPin, DollarSign, Calendar, Users, Wrench, ArrowLeft, TrendingUp, Loader2, Edit3, X, FileText, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 
 interface Property {
@@ -46,6 +46,9 @@ export default function PropertyDetailsPage() {
     mortgage: '',
   });
   const [saving, setSaving] = useState(false);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [applicationLink, setApplicationLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     loadProperty();
@@ -78,6 +81,36 @@ export default function PropertyDetailsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function generateApplicationLink() {
+    try {
+      setGeneratingLink(true);
+      const response = await fetch('/api/applications/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: params.id }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setApplicationLink(result.fullLink);
+      } else {
+        alert('Failed to generate link: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Generate link error:', error);
+      alert('Failed to generate application link');
+    } finally {
+      setGeneratingLink(false);
+    }
+  }
+
+  function copyLink() {
+    navigator.clipboard.writeText(applicationLink);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   }
 
   async function savePropertyEdits() {
@@ -162,6 +195,18 @@ export default function PropertyDetailsPage() {
             </div>
             <div className="flex items-center gap-3">
               <button
+                onClick={generateApplicationLink}
+                disabled={generatingLink}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+              >
+                {generatingLink ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <FileText className="h-5 w-5" />
+                )}
+                Generate Application Link
+              </button>
+              <button
                 onClick={() => setShowEditModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
               >
@@ -177,6 +222,42 @@ export default function PropertyDetailsPage() {
               </span>
             </div>
           </div>
+
+          {/* Application Link Display */}
+          {applicationLink && (
+            <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-green-900 mb-2">✅ Application Link Generated</h3>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={applicationLink}
+                      className="flex-1 px-3 py-2 bg-white border border-green-300 rounded text-sm font-mono"
+                    />
+                    <button
+                      onClick={copyLink}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      {linkCopied ? (
+                        <>
+                          <Check className="h-4 w-4" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-green-700 mt-2">Send this link to prospective tenants to apply for this property.</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Property Stats */}

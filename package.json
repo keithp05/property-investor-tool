@@ -28,6 +28,7 @@
     "dayjs": "^1.11.19",
     "intuit-oauth": "^4.2.1",
     "lucide-react": "^0.468.0",
+    "nanoid": "^5.1.6",
     "next": "^15.5.0",
     "next-auth": "^4.24.13",
     "node-quickbooks": "^2.0.46",
