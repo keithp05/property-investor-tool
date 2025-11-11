@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { FileText, Loader2, CheckCircle, Home, Briefcase, Users, PawPrint, CreditCard } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+// Dynamically import Stripe component (client-side only)
+const StripePaymentForm = dynamic(() => import('@/components/StripePaymentForm'), {
+  ssr: false,
+  loading: () => <div className="text-center py-8"><Loader2 className="h-8 w-8 animate-spin text-indigo-600 mx-auto" /></div>,
+});
 
 interface ApplicationData {
   property: {
@@ -686,19 +693,33 @@ export default function TenantApplicationPage() {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                 <CreditCard className="h-6 w-6 text-indigo-600" />
-                Application Fee
+                Application Fee Payment
               </h2>
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6">
-                <p className="text-2xl font-bold text-indigo-900 mb-2">
-                  ${applicationData?.applicationFee.toFixed(2)}
-                </p>
-                <p className="text-sm text-gray-600">Non-refundable application fee</p>
-                <p className="text-xs text-gray-500 mt-2">Covers credit check and background screening</p>
-              </div>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                <p className="text-amber-600 mb-4">⚠️ Stripe payment integration coming soon</p>
-                <p className="text-sm text-gray-500">For now, you can submit without payment to test the application</p>
-              </div>
+              <p className="text-sm text-gray-600 mb-4">
+                Non-refundable application fee covers credit check and background screening.
+              </p>
+              {formData.applicationFeePaid ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                  <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
+                  <p className="text-lg font-semibold text-green-900">Payment Successful!</p>
+                  <p className="text-sm text-green-700 mt-2">Your application fee has been paid.</p>
+                  <p className="text-xs text-gray-600 mt-3">
+                    Payment ID: {formData.stripePaymentIntentId}
+                  </p>
+                </div>
+              ) : (
+                <StripePaymentForm
+                  applicationLink={link}
+                  amount={applicationData?.applicationFee || 50}
+                  onSuccess={(paymentIntentId) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      applicationFeePaid: true,
+                      stripePaymentIntentId: paymentIntentId,
+                    }));
+                  }}
+                />
+              )}
             </div>
           )}
 

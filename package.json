@@ -18,7 +18,7 @@
     "@radix-ui/react-dropdown-menu": "^2.1.4",
     "@radix-ui/react-select": "^2.1.4",
     "@radix-ui/react-tabs": "^1.1.1",
-    "@stripe/stripe-js": "^8.3.0",
+    "@stripe/stripe-js": "^8.4.0",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.1.2",
@@ -37,7 +37,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.2",
     "recharts": "^2.15.0",
-    "stripe": "^19.2.1",
+    "stripe": "^19.3.0",
     "tailwind-merge": "^2.6.0",
     "uuid": "^13.0.0",
     "zod": "^3.24.1"
