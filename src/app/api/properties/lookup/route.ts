@@ -38,16 +38,32 @@ export async function POST(request: NextRequest) {
     let response: any = null;
     let usingBrightData = false;
 
-    // SECOND: Try RapidAPI Zillow
-    const statusTypes = ['ForSale', 'RecentlySold', 'ForRent'];
+    // SECOND: Try RapidAPI Zillow - First get ZPID
+    console.log('🔑 Getting property ZPID from RapidAPI...');
+    try {
+      const zpidResponse = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+        params: {
+          location: address,
+          status_type: 'ForSale',
+          page: 1,
+        },
+        headers: {
+          'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
+          'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
+        },
+        timeout: 15000,
+      });
 
-    for (const statusType of statusTypes) {
-      try {
-        response = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+      console.log('ZPID Response:', JSON.stringify(zpidResponse.data).substring(0, 200));
+
+      if (zpidResponse.data?.zpid) {
+        console.log(`✅ Found ZPID: ${zpidResponse.data.zpid}`);
+
+        // Now get full property details using the ZPID
+        console.log('📊 Fetching full property details...');
+        const propertyResponse = await axios.get('https://zillow-com1.p.rapidapi.com/property', {
           params: {
-            location: address,
-            status_type: statusType,
-            page: 1,
+            zpid: zpidResponse.data.zpid,
           },
           headers: {
             'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
@@ -56,17 +72,16 @@ export async function POST(request: NextRequest) {
           timeout: 15000,
         });
 
-        if (response.data?.props && response.data.props.length > 0) {
-          console.log(`✅ Found property with RapidAPI (${statusType})`);
-          break;
+        if (propertyResponse.data) {
+          console.log('✅ Got full property details from RapidAPI');
+          response = { data: { props: [propertyResponse.data] } };
         }
-      } catch (error: any) {
-        if (error.response?.status === 429) {
-          console.log(`⚠️  RapidAPI rate limited, will try Bright Data...`);
-          break; // Exit loop to try Bright Data
-        }
-        console.log(`⚠️  Failed to search with ${statusType}:`, error.message);
-        continue;
+      }
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        console.log(`⚠️  RapidAPI rate limited`);
+      } else {
+        console.log(`⚠️  RapidAPI error:`, error.message);
       }
     }
 
