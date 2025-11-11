@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Google Maps Places Autocomplete API (New)
- * Uses the new Places API (Text Search) with autocomplete
+ * Google Maps Places Autocomplete API
  * Returns address suggestions as the user types
  */
 export async function POST(request: NextRequest) {
@@ -31,44 +30,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use new Places API (Autocomplete) - https://developers.google.com/maps/documentation/places/web-service/autocomplete
-    const response = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-      },
-      body: JSON.stringify({
-        input,
-        includedPrimaryTypes: ['street_address', 'premise'],
-        locationBias: {
-          circle: {
-            center: {
-              latitude: 37.7749,
-              longitude: -122.4194
-            },
-            radius: 5000000.0 // 5000 km to cover entire US
-          }
-        },
-        languageCode: 'en',
-      }),
-    });
+    // Use Google Places Autocomplete API
+    const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
+    url.searchParams.append('input', input);
+    url.searchParams.append('key', apiKey);
+    url.searchParams.append('types', 'address');
+    url.searchParams.append('components', 'country:us');
 
+    const response = await fetch(url.toString());
     const data = await response.json();
 
-    if (!data.suggestions || data.suggestions.length === 0) {
+    console.log('📍 Google Maps API Response status:', data.status);
+
+    if (data.status === 'REQUEST_DENIED') {
+      console.error('❌ Google Maps API error:', data.error_message);
+      return NextResponse.json(
+        {
+          success: false,
+          error: data.error_message || 'API request denied. Please check API key and enable Places API.',
+          suggestions: [],
+        },
+        { status: 500 }
+      );
+    }
+
+    if (data.status === 'ZERO_RESULTS' || !data.predictions || data.predictions.length === 0) {
+      console.log('⚠️  No suggestions returned from Google Maps');
       return NextResponse.json({
         success: true,
         suggestions: [],
       });
     }
 
-    if (data.error) {
-      console.error('❌ Google Maps API error:', data.error);
+    if (data.status !== 'OK') {
+      console.error('❌ Google Maps API error:', data.status, data.error_message);
       return NextResponse.json(
         {
           success: false,
-          error: data.error.message || 'API request failed',
+          error: data.error_message || `API returned status: ${data.status}`,
           suggestions: [],
         },
         { status: 500 }
@@ -76,15 +75,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Format suggestions for easier use in UI
-    const suggestions = data.suggestions
-      .filter((s: any) => s.placePrediction)
-      .map((suggestion: any) => {
-        const pred = suggestion.placePrediction;
+    const suggestions = data.predictions
+      .map((prediction: any) => {
         return {
-          placeId: pred.placeId,
-          description: pred.text?.text || '',
-          mainText: pred.structuredFormat?.mainText?.text || '',
-          secondaryText: pred.structuredFormat?.secondaryText?.text || '',
+          placeId: prediction.place_id,
+          description: prediction.description,
+          mainText: prediction.structured_formatting?.main_text || '',
+          secondaryText: prediction.structured_formatting?.secondary_text || '',
         };
       })
       .slice(0, 5); // Limit to 5 suggestions
