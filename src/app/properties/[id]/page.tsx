@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Home, MapPin, DollarSign, Calendar, Users, Wrench, ArrowLeft, TrendingUp, Loader2, Edit3, X, FileText, Copy, Check } from 'lucide-react';
+import { Home, MapPin, DollarSign, Calendar, Users, Wrench, ArrowLeft, TrendingUp, Loader2, Edit3, X, FileText, Copy, Check, Building2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
+const PlaidLinkButton = dynamic(() => import('@/components/PlaidLinkButton'), {
+  ssr: false,
+  loading: () => <button disabled className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg"><Loader2 className="h-5 w-5 animate-spin" />Loading...</button>,
+});
 
 interface Property {
   id: string;
@@ -18,6 +24,11 @@ interface Property {
   purchasePrice: number | null;
   purchaseDate: Date | null;
   monthlyMortgage: number | null;
+  mortgageBalance: number | null;
+  mortgageRate: number | null;
+  nextPaymentDue: Date | null;
+  plaidLinked: boolean;
+  plaidLastSync: Date | null;
   currentTenancy: {
     tenant: {
       name: string;
@@ -49,6 +60,7 @@ export default function PropertyDetailsPage() {
   const [generatingLink, setGeneratingLink] = useState(false);
   const [applicationLink, setApplicationLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [refreshingMortgage, setRefreshingMortgage] = useState(false);
 
   useEffect(() => {
     loadProperty();
@@ -142,6 +154,31 @@ export default function PropertyDetailsPage() {
     }
   }
 
+  async function refreshMortgageData() {
+    try {
+      setRefreshingMortgage(true);
+      const response = await fetch('/api/plaid/get-liabilities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: params.id }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Mortgage data updated successfully!');
+        loadProperty(); // Reload property to show updated data
+      } else {
+        alert('Failed to refresh mortgage data: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Refresh mortgage error:', error);
+      alert('Failed to refresh mortgage data');
+    } finally {
+      setRefreshingMortgage(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -222,6 +259,75 @@ export default function PropertyDetailsPage() {
               </span>
             </div>
           </div>
+
+          {/* Plaid Mortgage Link */}
+          {!property.plaidLinked && (
+            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-blue-900 mb-2">🏦 Track Mortgage Balance Automatically</h3>
+                  <p className="text-xs text-blue-700 mb-3">Connect your mortgage account via Plaid to automatically sync your balance, interest rate, and payment information.</p>
+                  <PlaidLinkButton propertyId={property.id} onSuccess={loadProperty} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mortgage Info Display */}
+          {property.plaidLinked && property.mortgageBalance && (
+            <div className="mt-6 bg-white border border-gray-200 rounded-lg p-4">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-blue-600" />
+                  <h3 className="text-sm font-semibold text-gray-900">Mortgage Account (Synced via Plaid)</h3>
+                </div>
+                <button
+                  onClick={refreshMortgageData}
+                  disabled={refreshingMortgage}
+                  className="flex items-center gap-2 px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 disabled:bg-gray-100"
+                >
+                  {refreshingMortgage ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Refreshing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      Refresh
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500">Current Balance</p>
+                  <p className="text-lg font-semibold text-gray-900">${property.mortgageBalance?.toLocaleString()}</p>
+                </div>
+                {property.mortgageRate && (
+                  <div>
+                    <p className="text-xs text-gray-500">Interest Rate</p>
+                    <p className="text-lg font-semibold text-gray-900">{property.mortgageRate}%</p>
+                  </div>
+                )}
+                {property.monthlyMortgage && (
+                  <div>
+                    <p className="text-xs text-gray-500">Monthly Payment</p>
+                    <p className="text-lg font-semibold text-gray-900">${property.monthlyMortgage?.toLocaleString()}</p>
+                  </div>
+                )}
+                {property.nextPaymentDue && (
+                  <div>
+                    <p className="text-xs text-gray-500">Next Payment Due</p>
+                    <p className="text-lg font-semibold text-gray-900">{new Date(property.nextPaymentDue).toLocaleDateString()}</p>
+                  </div>
+                )}
+              </div>
+              {property.plaidLastSync && (
+                <p className="text-xs text-gray-500 mt-3">Last synced: {new Date(property.plaidLastSync).toLocaleString()}</p>
+              )}
+            </div>
+          )}
 
           {/* Application Link Display */}
           {applicationLink && (
