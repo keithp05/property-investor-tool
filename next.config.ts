@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
     ZILLOW_API_KEY: process.env.ZILLOW_API_KEY,
     BRIGHT_DATA_API_TOKEN: process.env.BRIGHT_DATA_API_TOKEN,
     BRIGHT_DATA_DATASET_ID: process.env.BRIGHT_DATA_DATASET_ID,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM,
+    AWS_REGION: process.env.AWS_REGION,
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
   },
   eslint: {
     // Warning: This allows production builds to successfully complete even if

@@ -3,10 +3,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { nanoid } from 'nanoid';
+import { sendApplicationLinkNotification } from '@/lib/notifications';
 
 /**
  * POST /api/applications/generate
- * Generate a unique application link for a property
+ * Generate a unique application link for a property and send to applicant(s)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ User authenticated:', session.user.id);
 
-    const { propertyId } = await request.json();
+    const { propertyId, applicantName, applicantEmail, applicantPhone, secondApplicant } = await request.json();
 
     if (!propertyId) {
       console.error('❌ No property ID provided');
@@ -72,30 +73,67 @@ export async function POST(request: NextRequest) {
     const uniqueLink = nanoid(16); // 16-character unique ID
 
     console.log('🔗 Creating application with link:', uniqueLink);
-    console.log('📝 Data:', { propertyId, landlordId: session.user.id, applicationLink: uniqueLink });
+    console.log('📝 Data:', { propertyId, landlordId: session.user.id, applicationLink: uniqueLink, applicantName, applicantEmail });
 
-    // Create application in database
+    // Create application in database with applicant contact info
     const application = await prisma.tenantApplication.create({
       data: {
         propertyId,
         landlordId: session.user.id, // User ID, not LandlordProfile ID
         applicationLink: uniqueLink,
         status: 'PENDING',
+        fullName: applicantName,
+        email: applicantEmail,
+        phone: applicantPhone,
+        // Store second applicant info if provided
+        secondApplicantInfo: secondApplicant ? JSON.stringify(secondApplicant) : null,
       },
     });
 
     console.log('✅ Application created:', application.id);
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amplifyapp.com';
     const fullLink = `${baseUrl}/apply/${uniqueLink}`;
 
     console.log(`✅ Generated application link for property ${propertyId}: ${fullLink}`);
+
+    // Send notifications to primary applicant
+    console.log('📧 Sending notification to primary applicant:', applicantEmail);
+    const { emailSent, smsSent } = await sendApplicationLinkNotification({
+      name: applicantName,
+      email: applicantEmail,
+      phone: applicantPhone,
+      propertyAddress: property.address,
+      applicationLink: fullLink,
+    });
+
+    // Send notifications to second applicant if provided
+    let secondApplicantNotifications = { emailSent: false, smsSent: false };
+    if (secondApplicant) {
+      console.log('📧 Sending notification to second applicant:', secondApplicant.email);
+      secondApplicantNotifications = await sendApplicationLinkNotification({
+        name: secondApplicant.name,
+        email: secondApplicant.email,
+        phone: secondApplicant.phone,
+        propertyAddress: property.address,
+        applicationLink: fullLink,
+      });
+    }
+
+    console.log(`✅ Notifications sent - Primary: Email ${emailSent ? '✓' : '✗'}, SMS ${smsSent ? '✓' : '✗'}`);
+    if (secondApplicant) {
+      console.log(`✅ Second applicant - Email ${secondApplicantNotifications.emailSent ? '✓' : '✗'}, SMS ${secondApplicantNotifications.smsSent ? '✓' : '✗'}`);
+    }
 
     return NextResponse.json({
       success: true,
       applicationId: application.id,
       link: uniqueLink,
       fullLink,
+      notifications: {
+        primary: { emailSent, smsSent },
+        secondary: secondApplicant ? secondApplicantNotifications : null,
+      },
     });
 
   } catch (error: any) {

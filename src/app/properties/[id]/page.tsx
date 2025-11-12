@@ -62,6 +62,16 @@ export default function PropertyDetailsPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [refreshingMortgage, setRefreshingMortgage] = useState(false);
   const [refreshingProperty, setRefreshingProperty] = useState(false);
+  const [showApplicationModal, setShowApplicationModal] = useState(false);
+  const [applicantInfo, setApplicantInfo] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    addSecondApplicant: false,
+    secondApplicantName: '',
+    secondApplicantEmail: '',
+    secondApplicantPhone: '',
+  });
 
   useEffect(() => {
     loadProperty();
@@ -98,13 +108,37 @@ export default function PropertyDetailsPage() {
 
   async function generateApplicationLink() {
     try {
+      // Validate required fields
+      if (!applicantInfo.name || !applicantInfo.email || !applicantInfo.phone) {
+        alert('Please fill in all applicant information fields');
+        return;
+      }
+
+      // Validate second applicant if added
+      if (applicantInfo.addSecondApplicant) {
+        if (!applicantInfo.secondApplicantName || !applicantInfo.secondApplicantEmail || !applicantInfo.secondApplicantPhone) {
+          alert('Please fill in all second applicant information fields');
+          return;
+        }
+      }
+
       setGeneratingLink(true);
       console.log('🔗 Generating application link for property:', params.id);
 
       const response = await fetch('/api/applications/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyId: params.id }),
+        body: JSON.stringify({
+          propertyId: params.id,
+          applicantName: applicantInfo.name,
+          applicantEmail: applicantInfo.email,
+          applicantPhone: applicantInfo.phone,
+          secondApplicant: applicantInfo.addSecondApplicant ? {
+            name: applicantInfo.secondApplicantName,
+            email: applicantInfo.secondApplicantEmail,
+            phone: applicantInfo.secondApplicantPhone,
+          } : null,
+        }),
       });
 
       console.log('📡 Response status:', response.status);
@@ -113,7 +147,9 @@ export default function PropertyDetailsPage() {
 
       if (result.success) {
         setApplicationLink(result.fullLink);
+        setShowApplicationModal(false);
         console.log('✅ Application link generated:', result.fullLink);
+        alert('Application link generated and sent! The applicant(s) will receive the link via email and SMS.');
       } else {
         console.error('❌ API returned error:', result.error, result.details);
         alert('Failed to generate link: ' + (result.error || 'Unknown error'));
@@ -279,15 +315,10 @@ export default function PropertyDetailsPage() {
                 Refresh Data
               </button>
               <button
-                onClick={generateApplicationLink}
-                disabled={generatingLink}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+                onClick={() => setShowApplicationModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
               >
-                {generatingLink ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <FileText className="h-5 w-5" />
-                )}
+                <FileText className="h-5 w-5" />
                 Generate Application Link
               </button>
               <button
@@ -677,6 +708,166 @@ export default function PropertyDetailsPage() {
                       </>
                     ) : (
                       'Save Changes'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Generate Application Link Modal */}
+        {showApplicationModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900">Generate Application Link</h2>
+                <button
+                  onClick={() => setShowApplicationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                <p className="text-gray-600 mb-6">
+                  Enter the prospective tenant's information. They will receive the application link via email and SMS.
+                </p>
+
+                <div className="space-y-6">
+                  {/* Primary Applicant */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Primary Applicant</h3>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Full Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={applicantInfo.name}
+                          onChange={(e) => setApplicantInfo({ ...applicantInfo, name: e.target.value })}
+                          placeholder="John Doe"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Email Address *
+                        </label>
+                        <input
+                          type="email"
+                          value={applicantInfo.email}
+                          onChange={(e) => setApplicantInfo({ ...applicantInfo, email: e.target.value })}
+                          placeholder="john@example.com"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Phone Number *
+                        </label>
+                        <input
+                          type="tel"
+                          value={applicantInfo.phone}
+                          onChange={(e) => setApplicantInfo({ ...applicantInfo, phone: e.target.value })}
+                          placeholder="(555) 123-4567"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Add Second Applicant Checkbox */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="addSecondApplicant"
+                      checked={applicantInfo.addSecondApplicant}
+                      onChange={(e) => setApplicantInfo({ ...applicantInfo, addSecondApplicant: e.target.checked })}
+                      className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                    />
+                    <label htmlFor="addSecondApplicant" className="text-sm font-medium text-gray-900">
+                      Add Second Applicant (spouse, partner, roommate)
+                    </label>
+                  </div>
+
+                  {/* Second Applicant Fields */}
+                  {applicantInfo.addSecondApplicant && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Second Applicant</h3>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Full Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={applicantInfo.secondApplicantName}
+                            onChange={(e) => setApplicantInfo({ ...applicantInfo, secondApplicantName: e.target.value })}
+                            placeholder="Jane Doe"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Email Address *
+                          </label>
+                          <input
+                            type="email"
+                            value={applicantInfo.secondApplicantEmail}
+                            onChange={(e) => setApplicantInfo({ ...applicantInfo, secondApplicantEmail: e.target.value })}
+                            placeholder="jane@example.com"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Phone Number *
+                          </label>
+                          <input
+                            type="tel"
+                            value={applicantInfo.secondApplicantPhone}
+                            onChange={(e) => setApplicantInfo({ ...applicantInfo, secondApplicantPhone: e.target.value })}
+                            placeholder="(555) 987-6543"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 mt-8 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={() => setShowApplicationModal(false)}
+                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={generateApplicationLink}
+                    disabled={generatingLink}
+                    className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold disabled:bg-gray-400 flex items-center justify-center gap-2"
+                  >
+                    {generatingLink ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-5 w-5" />
+                        Generate & Send Link
+                      </>
                     )}
                   </button>
                 </div>
