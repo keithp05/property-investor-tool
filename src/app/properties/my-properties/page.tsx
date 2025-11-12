@@ -88,11 +88,27 @@ export default function MyPropertiesPage() {
   const handleAddProperty = async () => {
     setLoading(true);
     try {
-      // Fetch full property details from Zillow
+      // Prepare property data with fetched details from Zillow
+      const propertyData = {
+        ...newProperty,
+        // Include fetched property details if available
+        ...(fetchedPropertyDetails && {
+          bedrooms: fetchedPropertyDetails.bedrooms,
+          bathrooms: fetchedPropertyDetails.bathrooms,
+          squareFeet: fetchedPropertyDetails.squareFeet,
+          yearBuilt: fetchedPropertyDetails.yearBuilt,
+          propertyType: fetchedPropertyDetails.propertyType,
+          estimatedValue: fetchedPropertyDetails.estimatedValue || fetchedPropertyDetails.zestimate,
+          marketRent: fetchedPropertyDetails.rentZestimate,
+        }),
+      };
+
+      console.log('📤 Submitting property data:', propertyData);
+
       const response = await fetch('/api/properties/add-landlord-property', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProperty),
+        body: JSON.stringify(propertyData),
       });
 
       const data = await response.json();
@@ -118,6 +134,7 @@ export default function MyPropertiesPage() {
         setFetchedPropertyDetails(null);
         setCmaAnalysis(null);
         setSection8Data(null);
+        alert('✅ Property added successfully!');
       } else {
         alert('Failed to add property: ' + data.error);
       }

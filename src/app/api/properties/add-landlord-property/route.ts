@@ -45,56 +45,73 @@ export async function POST(request: NextRequest) {
       mortgageTerm,
       lenderName,
       loanNumber,
-      status
+      status,
+      // Pre-fetched property details from frontend
+      bedrooms,
+      bathrooms,
+      squareFeet,
+      yearBuilt,
+      propertyType,
+      estimatedValue,
+      marketRent
     } = body;
 
     console.log('📍 Adding landlord property:', address, city, state, zipCode);
 
-    // Fetch property details from Zillow
+    // Use pre-fetched property details if provided, otherwise fetch from Zillow
     let propertyDetails: any = {
-      bedrooms: 0,
-      bathrooms: 0,
-      squareFeet: undefined,
-      yearBuilt: undefined,
-      propertyType: 'SINGLE_FAMILY',
-      estimatedValue: undefined,
+      bedrooms: bedrooms || 0,
+      bathrooms: bathrooms || 0,
+      squareFeet: squareFeet || undefined,
+      yearBuilt: yearBuilt || undefined,
+      propertyType: propertyType || 'SINGLE_FAMILY',
+      estimatedValue: estimatedValue || undefined,
+      marketRent: marketRent || undefined,
     };
 
-    try {
-      const location = `${address}, ${city}, ${state} ${zipCode}`;
-      console.log('🔍 Fetching property details from Zillow:', location);
+    // Only fetch from Zillow if we don't have property details
+    if (!bedrooms && !bathrooms) {
+      console.log('🔍 No pre-fetched data, fetching from Zillow...');
 
-      const response = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
-        params: {
-          location: location,
-          status_type: 'ForSale',
-          page: 1,
-        },
-        headers: {
-          'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
-          'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
-        },
-        timeout: 10000,
-      });
+      try {
+        const location = `${address}, ${city}, ${state} ${zipCode}`;
+        console.log('📡 Fetching property details from Zillow:', location);
 
-      if (response.data?.props && response.data.props.length > 0) {
-        const zillowData = response.data.props[0];
-        console.log('✅ Found property on Zillow:', zillowData.address);
+        const response = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+          params: {
+            location: location,
+            status_type: 'ForSale',
+            page: 1,
+          },
+          headers: {
+            'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
+            'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
+          },
+          timeout: 10000,
+        });
 
-        propertyDetails = {
-          bedrooms: zillowData.bedrooms || 0,
-          bathrooms: zillowData.bathrooms || 0,
-          squareFeet: zillowData.livingArea,
-          yearBuilt: zillowData.yearBuilt,
-          propertyType: zillowData.propertyType || 'SINGLE_FAMILY',
-          estimatedValue: zillowData.price || zillowData.zestimate,
-        };
-      } else {
-        console.log('⚠️  Property not found on Zillow, using defaults');
+        if (response.data?.props && response.data.props.length > 0) {
+          const zillowData = response.data.props[0];
+          console.log('✅ Found property on Zillow:', zillowData.address);
+
+          propertyDetails = {
+            bedrooms: zillowData.bedrooms || 0,
+            bathrooms: zillowData.bathrooms || 0,
+            squareFeet: zillowData.livingArea,
+            yearBuilt: zillowData.yearBuilt,
+            propertyType: zillowData.propertyType || 'SINGLE_FAMILY',
+            estimatedValue: zillowData.price || zillowData.zestimate,
+            marketRent: zillowData.rentZestimate,
+          };
+        } else {
+          console.log('⚠️  Property not found on Zillow, using defaults');
+        }
+      } catch (zillowError: any) {
+        console.error('Zillow API error:', zillowError.message);
+        // Continue with default values
       }
-    } catch (zillowError: any) {
-      console.error('Zillow API error:', zillowError.message);
-      // Continue with default values
+    } else {
+      console.log('✅ Using pre-fetched property details from frontend');
     }
 
     // Save property to database
