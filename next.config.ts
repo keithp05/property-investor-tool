@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
     AWS_REGION: process.env.AWS_REGION,
     AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    SNS_REGION: process.env.SNS_REGION,
+    SNS_ACCESS_KEY_ID: process.env.SNS_ACCESS_KEY_ID,
+    SNS_SECRET_ACCESS_KEY: process.env.SNS_SECRET_ACCESS_KEY,
   },
   eslint: {
     // Warning: This allows production builds to successfully complete even if
