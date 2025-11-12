@@ -61,6 +61,7 @@ export default function PropertyDetailsPage() {
   const [applicationLink, setApplicationLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [refreshingMortgage, setRefreshingMortgage] = useState(false);
+  const [refreshingProperty, setRefreshingProperty] = useState(false);
 
   useEffect(() => {
     loadProperty();
@@ -185,6 +186,33 @@ export default function PropertyDetailsPage() {
     }
   }
 
+  async function refreshPropertyData() {
+    try {
+      setRefreshingProperty(true);
+      console.log('🔄 Refreshing property data from Zillow...');
+
+      const response = await fetch('/api/properties/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: params.id }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Property data refreshed successfully! Updated from Zillow with latest values, CMA analysis, and rental estimates.');
+        loadProperty(); // Reload property to show updated data
+      } else {
+        alert('Failed to refresh property data: ' + result.error);
+      }
+    } catch (error: any) {
+      console.error('Refresh property error:', error);
+      alert('Failed to refresh property data: ' + error.message);
+    } finally {
+      setRefreshingProperty(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -237,6 +265,19 @@ export default function PropertyDetailsPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={refreshPropertyData}
+                disabled={refreshingProperty}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                title="Refresh property data from Zillow (values, CMA, rental estimates)"
+              >
+                {refreshingProperty ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-5 w-5" />
+                )}
+                Refresh Data
+              </button>
               <button
                 onClick={generateApplicationLink}
                 disabled={generatingLink}

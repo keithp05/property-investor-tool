@@ -270,3 +270,20 @@ variable "s3_intelligent_tiering_enabled" {
     prod = true
   }
 }
+
+# ========================================
+# Cron Job Configuration
+# ========================================
+
+variable "cron_secret" {
+  description = "Secret token for authenticating cron job requests"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "amplify_domain" {
+  description = "Amplify app domain for API endpoint"
+  type        = string
+  default     = "https://develop.d3q1fuby25122q.amplifyapp.com"
+}
