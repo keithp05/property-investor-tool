@@ -47,26 +47,72 @@ export async function POST(request: NextRequest) {
 
         // Fetch fresh data from Zillow
         const location = `${property.address}, ${property.city}, ${property.state} ${property.zipCode}`;
-
-        const zillowResponse = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
-          params: {
-            location: location,
-            status_type: 'ForSale',
-            page: 1,
-          },
-          headers: {
-            'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
-            'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
-          },
-          timeout: 10000,
-        });
-
-        // Extract property details
         let propertyDetails: any = null;
+        let zpid: string | null = null;
 
-        if (zillowResponse.data?.props && zillowResponse.data.props.length > 0) {
-          propertyDetails = zillowResponse.data.props[0];
-        } else {
+        // Step 1: Get ZPID (without status_type to include ALL properties)
+        try {
+          const zpidResponse = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+            params: {
+              location: location,
+              page: 1,
+              // NO status_type - includes all properties, not just ForSale
+            },
+            headers: {
+              'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
+              'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
+            },
+            timeout: 10000,
+          });
+
+          if (zpidResponse.data?.zpid) {
+            zpid = zpidResponse.data.zpid.toString();
+          } else if (zpidResponse.data?.props && zpidResponse.data.props.length > 0) {
+            zpid = zpidResponse.data.props[0].zpid?.toString();
+          }
+        } catch (zpidError) {
+          console.log(`⚠️ ZPID search failed for ${property.address}`);
+        }
+
+        // Step 2: If we have ZPID, fetch full property details
+        if (zpid) {
+          const propertyResponse = await axios.get('https://zillow-com1.p.rapidapi.com/property', {
+            params: {
+              zpid: zpid,
+            },
+            headers: {
+              'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
+              'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
+            },
+            timeout: 10000,
+          });
+
+          if (propertyResponse.data) {
+            propertyDetails = propertyResponse.data;
+          }
+        }
+
+        // Step 3: Fallback - try direct search
+        if (!propertyDetails) {
+          const zillowResponse = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+            params: {
+              location: location,
+              page: 1,
+            },
+            headers: {
+              'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
+              'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
+            },
+            timeout: 10000,
+          });
+
+          if (zillowResponse.data?.props && zillowResponse.data.props.length > 0) {
+            propertyDetails = zillowResponse.data.props[0];
+          }
+        }
+
+        // If no property found after all attempts
+        if (!propertyDetails) {
           console.error(`❌ No property data found for ${property.address}`);
           failureCount++;
           results.push({
