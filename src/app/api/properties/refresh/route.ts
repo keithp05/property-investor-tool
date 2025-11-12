@@ -77,9 +77,15 @@ export async function POST(request: NextRequest) {
         });
       } else {
         console.log('⚠️ No properties found in Zillow response');
+        console.log('Search location:', location);
+        console.log('Response data:', JSON.stringify(zillowResponse.data, null, 2));
         return NextResponse.json({
           success: false,
-          error: 'No property data found on Zillow for this address'
+          error: 'No property data found on Zillow for this address. The property may not be listed on Zillow, or the address format may not match.',
+          details: {
+            searchedAddress: location,
+            suggestion: 'Try manually updating the property details from the Edit Property form.'
+          }
         }, { status: 404 });
       }
     } catch (error: any) {
