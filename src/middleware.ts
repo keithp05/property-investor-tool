@@ -14,7 +14,8 @@ export async function middleware(request: NextRequest) {
   const publicRoutes = ['/', '/login', '/signup'];
   const isPublicRoute = publicRoutes.includes(pathname) ||
                         pathname.startsWith('/_next') ||
-                        pathname.startsWith('/api/'); // Allow ALL API routes (they handle their own auth)
+                        pathname.startsWith('/api/') || // Allow ALL API routes (they handle their own auth)
+                        pathname.startsWith('/apply/'); // Allow tenant application links (guest access)
 
   // Allow public routes
   if (isPublicRoute) {
