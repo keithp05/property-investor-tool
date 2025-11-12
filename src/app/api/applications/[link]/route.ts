@@ -26,7 +26,7 @@ export async function GET(
             monthlyRent: true,
             bedrooms: true,
             bathrooms: true,
-            squareFootage: true,
+            squareFeet: true,
           },
         },
         landlord: {
