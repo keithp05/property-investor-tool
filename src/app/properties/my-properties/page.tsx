@@ -18,12 +18,15 @@ interface LandlordProperty {
   yearBuilt?: number;
   propertyType: string;
   estimatedValue?: number;
+  currentValue?: number;
+  marketRent?: number;
 
   // Ownership details
   purchasePrice?: number;
   purchaseDate?: string;
   monthlyMortgage?: number;
   monthlyRent?: number;
+  mortgageBalance?: number;
 
   // Tenant info
   currentTenant?: string;
@@ -282,18 +285,58 @@ export default function MyPropertiesPage() {
                         <div>
                           <p className="text-gray-500">Estimated Value</p>
                           <p className="font-semibold text-green-600">
-                            ${property.estimatedValue?.toLocaleString() || 'N/A'}
+                            ${property.estimatedValue?.toLocaleString() || property.currentValue?.toLocaleString() || 'N/A'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-500">Monthly Rent</p>
+                          <p className="text-gray-500">Current Rent</p>
                           <p className="font-semibold text-indigo-600">
                             ${property.monthlyRent?.toLocaleString() || 'N/A'}
                           </p>
                         </div>
                         <div>
+                          <p className="text-gray-500">Market Rent</p>
+                          <p className="font-semibold text-blue-600">
+                            ${property.marketRent?.toLocaleString() || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4">
+                        <div>
                           <p className="text-gray-500">Monthly Mortgage</p>
                           <p className="font-semibold">${property.monthlyMortgage?.toLocaleString() || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Rent Variance</p>
+                          {property.monthlyRent && property.marketRent ? (
+                            <p className={`font-semibold ${property.monthlyRent >= property.marketRent ? 'text-green-600' : 'text-red-600'}`}>
+                              {property.monthlyRent >= property.marketRent ? '+' : ''}${(property.monthlyRent - property.marketRent).toLocaleString()}
+                              {' '}({Math.round(((property.monthlyRent - property.marketRent) / property.marketRent) * 100)}%)
+                            </p>
+                          ) : (
+                            <p className="font-semibold">N/A</p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Equity</p>
+                          {property.estimatedValue && property.mortgageBalance ? (
+                            <p className="font-semibold text-purple-600">
+                              ${((property.estimatedValue || 0) - (property.mortgageBalance || 0)).toLocaleString()}
+                            </p>
+                          ) : (
+                            <p className="font-semibold">N/A</p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Cash Flow</p>
+                          {property.monthlyRent && property.monthlyMortgage ? (
+                            <p className={`font-semibold ${property.monthlyRent - property.monthlyMortgage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              ${(property.monthlyRent - property.monthlyMortgage).toLocaleString()}/mo
+                            </p>
+                          ) : (
+                            <p className="font-semibold">N/A</p>
+                          )}
                         </div>
                       </div>
 
