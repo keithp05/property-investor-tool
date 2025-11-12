@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import axios from 'axios';
 
 /**
  * Cron job to refresh property data monthly
@@ -45,42 +46,27 @@ export async function POST(request: NextRequest) {
         console.log(`🔍 Refreshing property: ${property.address}`);
 
         // Fetch fresh data from Zillow
-        const zillowResponse = await fetch(
-          `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(
-            `${property.address}, ${property.city}, ${property.state} ${property.zipCode}`
-          )}`,
-          {
-            headers: {
-              'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
-              'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
-            },
-          }
-        );
+        const location = `${property.address}, ${property.city}, ${property.state} ${property.zipCode}`;
 
-        if (!zillowResponse.ok) {
-          console.error(`❌ Zillow API error for ${property.address}:`, zillowResponse.status);
-          failureCount++;
-          results.push({
-            propertyId: property.id,
-            address: property.address,
-            success: false,
-            error: `Zillow API error: ${zillowResponse.status}`,
-          });
-          continue;
-        }
-
-        const zillowData = await zillowResponse.json();
+        const zillowResponse = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+          params: {
+            location: location,
+            status_type: 'ForSale',
+            page: 1,
+          },
+          headers: {
+            'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
+            'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
+          },
+          timeout: 10000,
+        });
 
         // Extract property details
         let propertyDetails: any = null;
 
-        if (zillowData && Array.isArray(zillowData) && zillowData.length > 0) {
-          propertyDetails = zillowData[0];
-        } else if (zillowData && typeof zillowData === 'object') {
-          propertyDetails = zillowData;
-        }
-
-        if (!propertyDetails) {
+        if (zillowResponse.data?.props && zillowResponse.data.props.length > 0) {
+          propertyDetails = zillowResponse.data.props[0];
+        } else {
           console.error(`❌ No property data found for ${property.address}`);
           failureCount++;
           results.push({

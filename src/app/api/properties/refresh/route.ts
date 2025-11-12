@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import axios from 'axios';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,72 +45,77 @@ export async function POST(request: NextRequest) {
     console.log('🔍 Fetching fresh data from Zillow for:', property.address);
 
     // Fetch fresh data from Zillow
-    const zillowResponse = await fetch(
-      `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(
-        `${property.address}, ${property.city}, ${property.state} ${property.zipCode}`
-      )}`,
-      {
+    const location = `${property.address}, ${property.city}, ${property.state} ${property.zipCode}`;
+    console.log('📡 Fetching property details from Zillow:', location);
+
+    let propertyDetails: any = null;
+
+    try {
+      const zillowResponse = await axios.get('https://zillow-com1.p.rapidapi.com/propertyExtendedSearch', {
+        params: {
+          location: location,
+          status_type: 'ForSale',
+          page: 1,
+        },
         headers: {
-          'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
+          'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
           'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
         },
-      }
-    );
+        timeout: 10000,
+      });
 
-    if (!zillowResponse.ok) {
-      console.error('❌ Zillow API error:', zillowResponse.status);
+      console.log('📦 Zillow API response status:', zillowResponse.status);
+
+      if (zillowResponse.data?.props && zillowResponse.data.props.length > 0) {
+        propertyDetails = zillowResponse.data.props[0];
+        console.log('✅ Property details found:', {
+          address: propertyDetails.address,
+          bedrooms: propertyDetails.bedrooms,
+          bathrooms: propertyDetails.bathrooms,
+          price: propertyDetails.price,
+          rentZestimate: propertyDetails.rentZestimate,
+        });
+      } else {
+        console.log('⚠️ No properties found in Zillow response');
+        return NextResponse.json({
+          success: false,
+          error: 'No property data found on Zillow for this address'
+        }, { status: 404 });
+      }
+    } catch (error: any) {
+      console.error('❌ Zillow API error:', error.response?.status, error.response?.data || error.message);
       return NextResponse.json({
         success: false,
-        error: 'Failed to fetch property data from Zillow'
+        error: `Failed to fetch property data from Zillow: ${error.message}`,
+        details: error.response?.data
       }, { status: 500 });
     }
 
-    const zillowData = await zillowResponse.json();
-    console.log('📦 Zillow response:', JSON.stringify(zillowData, null, 2));
-
-    // Extract property details
-    let propertyDetails: any = null;
-
-    if (zillowData && Array.isArray(zillowData) && zillowData.length > 0) {
-      propertyDetails = zillowData[0];
-    } else if (zillowData && typeof zillowData === 'object') {
-      propertyDetails = zillowData;
-    }
-
-    if (!propertyDetails) {
-      return NextResponse.json({
-        success: false,
-        error: 'No property data found on Zillow'
-      }, { status: 404 });
-    }
-
-    console.log('✅ Property details found:', {
-      bedrooms: propertyDetails.bedrooms,
-      bathrooms: propertyDetails.bathrooms,
-      zestimate: propertyDetails.zestimate,
-      rentZestimate: propertyDetails.rentZestimate,
-    });
-
-    // Fetch CMA data
+    // Fetch CMA data (optional - skip if zpid not available)
     let cmaData = null;
-    try {
-      console.log('🔍 Fetching CMA data...');
-      const cmaResponse = await fetch(
-        `https://zillow-com1.p.rapidapi.com/similarSales?zpid=${propertyDetails.zpid}`,
-        {
+    if (propertyDetails.zpid) {
+      try {
+        console.log('🔍 Fetching CMA data for zpid:', propertyDetails.zpid);
+        const cmaResponse = await axios.get('https://zillow-com1.p.rapidapi.com/similarSales', {
+          params: {
+            zpid: propertyDetails.zpid,
+          },
           headers: {
-            'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
+            'X-RapidAPI-Key': process.env.ZILLOW_API_KEY || '',
             'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com',
           },
-        }
-      );
+          timeout: 10000,
+        });
 
-      if (cmaResponse.ok) {
-        cmaData = await cmaResponse.json();
-        console.log('✅ CMA data fetched:', cmaData ? 'Success' : 'No data');
+        if (cmaResponse.data) {
+          cmaData = cmaResponse.data;
+          console.log('✅ CMA data fetched:', cmaData ? 'Success' : 'No data');
+        }
+      } catch (error) {
+        console.error('⚠️ CMA fetch failed:', error);
       }
-    } catch (error) {
-      console.error('⚠️ CMA fetch failed:', error);
+    } else {
+      console.log('⚠️ No zpid available, skipping CMA fetch');
     }
 
     // Fetch Section 8 data
