@@ -149,7 +149,12 @@ export default function PropertyDetailsPage() {
         setApplicationLink(result.fullLink);
         setShowApplicationModal(false);
         console.log('✅ Application link generated:', result.fullLink);
-        alert('Application link generated and sent! The applicant(s) will receive the link via email and SMS.');
+
+        // Show detailed notification status
+        const emailStatus = result.notifications?.primary?.emailSent ? '✅ Email sent' : '❌ Email failed';
+        const smsStatus = result.notifications?.primary?.smsSent ? '✅ SMS sent' : '❌ SMS failed';
+
+        alert(`Application link generated!\n\n${emailStatus}\n${smsStatus}\n\nLink: ${result.fullLink}\n\nYou can copy and send this link manually if needed.`);
       } else {
         console.error('❌ API returned error:', result.error, result.details);
         alert('Failed to generate link: ' + (result.error || 'Unknown error'));
