@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
         state: property.state,
         zipCode: property.zipCode,
         status: property.status,
-        monthlyRent: property.monthlyRent ? Number(property.monthlyRent) : null,
+        monthlyRent: property.status === 'VACANT' ? null : (property.monthlyRent ? Number(property.monthlyRent) : null),
         marketRent: property.marketRent ? Number(property.marketRent) : null,
         section8FMR: property.section8FMR ? Number(property.section8FMR) : null,
         section8ContactPhone: property.section8ContactPhone,

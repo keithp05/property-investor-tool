@@ -82,20 +82,23 @@ export async function POST(request: NextRequest) {
         landlordId: session.user.id, // User ID, not LandlordProfile ID
         applicationLink: uniqueLink,
         status: 'PENDING',
-        fullName: applicantName,
-        email: applicantEmail,
-        phone: applicantPhone,
-        // Store second applicant info if provided
-        secondApplicantInfo: secondApplicant ? JSON.stringify(secondApplicant) : null,
+        fullName: applicantName || null,
+        email: applicantEmail || null,
+        phone: applicantPhone || null,
+        hasSecondApplicant: !!secondApplicant,
+        // Store second applicant info if provided (as JSON, not stringified)
+        secondApplicantInfo: secondApplicant ? secondApplicant : null,
       },
     });
 
     console.log('✅ Application created:', application.id);
+    console.log('🔗 Application link stored in DB:', application.applicationLink);
 
     const baseUrl = process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amplifyapp.com';
     const fullLink = `${baseUrl}/apply/${uniqueLink}`;
 
     console.log(`✅ Generated application link for property ${propertyId}: ${fullLink}`);
+    console.log('🔍 Verification - Link in DB matches generated:', application.applicationLink === uniqueLink);
 
     // Send notifications to primary applicant
     console.log('📧 Sending notification to primary applicant:', applicantEmail);

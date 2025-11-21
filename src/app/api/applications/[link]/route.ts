@@ -7,10 +7,22 @@ import { prisma } from '@/lib/prisma';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { link: string } }
+  { params }: { params: Promise<{ link: string }> | { link: string } }
 ) {
   try {
-    const { link } = params;
+    // Handle both sync and async params (Next.js 13+ vs 15+)
+    const resolvedParams = await Promise.resolve(params);
+    const { link } = resolvedParams;
+
+    console.log('🔍 Fetching application with link:', link);
+
+    if (!link || link.trim() === '') {
+      console.error('❌ Empty or invalid link provided');
+      return NextResponse.json(
+        { error: 'Invalid application link' },
+        { status: 400 }
+      );
+    }
 
     const application = await prisma.tenantApplication.findUnique({
       where: { applicationLink: link },
@@ -30,12 +42,13 @@ export async function GET(
           },
         },
         landlord: {
-          include: {
-            user: {
+          select: {
+            name: true,
+            email: true,
+            landlordProfile: {
               select: {
-                name: true,
-                email: true,
                 phone: true,
+                company: true,
               },
             },
           },
@@ -44,11 +57,32 @@ export async function GET(
     });
 
     if (!application) {
+      console.error('❌ Application not found for link:', link);
+      // Try to find similar links for debugging
+      const similarApps = await prisma.tenantApplication.findMany({
+        where: {
+          applicationLink: {
+            contains: link.substring(0, 8), // First 8 chars for debugging
+          },
+        },
+        select: {
+          applicationLink: true,
+          id: true,
+        },
+        take: 5,
+      });
+      console.log('🔍 Similar application links found:', similarApps);
+      
       return NextResponse.json(
-        { error: 'Application not found' },
+        { 
+          error: 'Application not found',
+          details: `No application found with link: ${link}`,
+        },
         { status: 404 }
       );
     }
+
+    console.log('✅ Application found:', application.id);
 
     // Check if application has already been submitted
     if (application.status !== 'PENDING') {
@@ -78,9 +112,10 @@ export async function GET(
         id: application.id,
         property: application.property,
         landlord: {
-          name: application.landlord.user.name,
-          email: application.landlord.user.email,
-          phone: application.landlord.user.phone,
+          name: application.landlord.name,
+          email: application.landlord.email,
+          phone: application.landlord.landlordProfile?.phone || null,
+          company: application.landlord.landlordProfile?.company || null,
         },
         applicationFee: application.applicationFee,
         status: application.status,

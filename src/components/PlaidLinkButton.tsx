@@ -65,7 +65,8 @@ export default function PlaidLinkButton({ propertyId, onSuccess }: PlaidLinkButt
             open();
           }, 500);
         } else {
-          alert('Failed to initialize Plaid: ' + result.error);
+          const errorMsg = result.details || result.error || 'Unknown error';
+          alert('Failed to initialize Plaid: ' + errorMsg + '\n\nPlease contact support to enable mortgage tracking.');
         }
       } catch (error) {
         console.error('Create link token error:', error);

@@ -25,15 +25,28 @@ interface SendEmailParams {
  */
 export async function sendSMS({ phoneNumber, message }: SendSMSParams): Promise<boolean> {
   try {
+    // Check if AWS credentials are configured
+    const accessKeyId = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+
+    if (!accessKeyId || !secretAccessKey) {
+      console.error('❌ AWS credentials not configured for SMS');
+      console.error('Missing SNS_ACCESS_KEY_ID or SNS_SECRET_ACCESS_KEY');
+      return false;
+    }
+
     // Format phone number to E.164 format (+1XXXXXXXXXX)
     let formattedPhone = phoneNumber.replace(/\D/g, ''); // Remove non-digits
     if (formattedPhone.length === 10) {
       formattedPhone = `+1${formattedPhone}`; // Add US country code
+    } else if (formattedPhone.length === 11 && formattedPhone.startsWith('1')) {
+      formattedPhone = `+${formattedPhone}`;
     } else if (!formattedPhone.startsWith('+')) {
       formattedPhone = `+${formattedPhone}`;
     }
 
     console.log('📱 Sending SMS to:', formattedPhone);
+    console.log('📝 Message preview:', message.substring(0, 50) + '...');
 
     const command = new PublishCommand({
       PhoneNumber: formattedPhone,
@@ -46,11 +59,18 @@ export async function sendSMS({ phoneNumber, message }: SendSMSParams): Promise<
       },
     });
 
-    await snsClient.send(command);
-    console.log('✅ SMS sent successfully');
+    const result = await snsClient.send(command);
+    console.log('✅ SMS sent successfully. MessageId:', result.MessageId);
     return true;
-  } catch (error) {
-    console.error('❌ Failed to send SMS:', error);
+  } catch (error: any) {
+    console.error('❌ Failed to send SMS:', error.message || error);
+    console.error('Error details:', error);
+    if (error.name === 'InvalidParameterException') {
+      console.error('Invalid phone number format:', phoneNumber);
+    }
+    if (error.name === 'InvalidClientTokenId' || error.name === 'SignatureDoesNotMatch') {
+      console.error('AWS credentials are invalid');
+    }
     return false;
   }
 }
@@ -62,6 +82,12 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
   try {
     console.log('📧 Sending email to:', to);
 
+    // Check if Resend API key is configured
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ RESEND_API_KEY not configured');
+      return false;
+    }
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -69,7 +95,7 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
         'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM || 'noreply@rentaliq.com',
+        from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
         to: [to],
         subject: subject,
         text: body,
@@ -78,15 +104,19 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
       console.error('❌ Failed to send email:', error);
+      console.error('Response status:', response.status, response.statusText);
+      console.error('Attempted to send to:', to);
+      console.error('From address:', process.env.EMAIL_FROM || 'onboarding@resend.dev');
       return false;
     }
 
-    console.log('✅ Email sent successfully');
+    const result = await response.json();
+    console.log('✅ Email sent successfully:', result.id);
     return true;
-  } catch (error) {
-    console.error('❌ Failed to send email:', error);
+  } catch (error: any) {
+    console.error('❌ Failed to send email:', error.message || error);
     return false;
   }
 }

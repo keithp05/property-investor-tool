@@ -228,7 +228,7 @@ export default function MyPropertiesPage() {
               <div>
                 <p className="text-sm text-gray-600">Monthly Income</p>
                 <p className="text-2xl font-bold text-indigo-600">
-                  ${properties.reduce((sum, p) => sum + (p.monthlyRent || 0), 0).toLocaleString()}
+                  ${properties.filter(p => p.status === 'RENTED' || p.status === 'OCCUPIED').reduce((sum, p) => sum + (p.monthlyRent || 0), 0).toLocaleString()}
                 </p>
               </div>
               <DollarSign className="h-10 w-10 text-indigo-600" />

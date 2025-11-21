@@ -114,11 +114,16 @@ export default function TenantApplicationPage() {
   useEffect(() => {
     const fetchApplication = async () => {
       try {
+        console.log('🔍 Fetching application with link:', link);
         const response = await fetch(`/api/applications/${link}`);
+        console.log('📡 Response status:', response.status);
         const data = await response.json();
+        console.log('📦 Response data:', data);
 
         if (!data.success) {
-          setError(data.error || 'Application not found');
+          const errorMsg = data.details || data.error || 'Application not found';
+          console.error('❌ Application fetch failed:', errorMsg);
+          setError(errorMsg);
           setLoading(false);
           return;
         }
@@ -126,13 +131,18 @@ export default function TenantApplicationPage() {
         setApplicationData(data.application);
         setLoading(false);
       } catch (error) {
-        console.error('Failed to fetch application:', error);
-        setError('Failed to load application');
+        console.error('❌ Failed to fetch application:', error);
+        setError('Failed to load application. Please check the link and try again.');
         setLoading(false);
       }
     };
 
-    fetchApplication();
+    if (link) {
+      fetchApplication();
+    } else {
+      setError('Invalid application link');
+      setLoading(false);
+    }
   }, [link]);
 
   const handleSubmit = async () => {
@@ -178,7 +188,13 @@ export default function TenantApplicationPage() {
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
           <div className="text-red-500 text-5xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Application Not Found</h1>
-          <p className="text-gray-600">{error}</p>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <div className="text-xs text-gray-500 mt-4 p-3 bg-gray-50 rounded">
+            <p className="font-mono break-all">Link: {link}</p>
+          </div>
+          <p className="text-sm text-gray-500 mt-4">
+            If you believe this is an error, please contact the property manager.
+          </p>
         </div>
       </div>
     );

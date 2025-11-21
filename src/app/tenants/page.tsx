@@ -61,6 +61,13 @@ export default function TenantsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
+  const [applicantName, setApplicantName] = useState('');
+  const [applicantEmail, setApplicantEmail] = useState('');
+  const [applicantPhone, setApplicantPhone] = useState('');
+  const [hasSecondApplicant, setHasSecondApplicant] = useState(false);
+  const [secondApplicantName, setSecondApplicantName] = useState('');
+  const [secondApplicantEmail, setSecondApplicantEmail] = useState('');
+  const [secondApplicantPhone, setSecondApplicantPhone] = useState('');
 
   useEffect(() => {
     if (activeTab === 'tenants') {
@@ -140,14 +147,39 @@ export default function TenantsPage() {
       return;
     }
 
+    if (!applicantName || !applicantEmail || !applicantPhone) {
+      alert('Please fill in all required fields: Name, Email, and Phone');
+      return;
+    }
+
+    if (hasSecondApplicant && (!secondApplicantName || !secondApplicantEmail || !secondApplicantPhone)) {
+      alert('Please fill in all fields for the second applicant');
+      return;
+    }
+
     try {
       setGenerating(true);
       console.log('🔗 Generating application link for property:', selectedPropertyId);
 
+      const requestBody: any = {
+        propertyId: selectedPropertyId,
+        applicantName,
+        applicantEmail,
+        applicantPhone,
+      };
+
+      if (hasSecondApplicant) {
+        requestBody.secondApplicant = {
+          name: secondApplicantName,
+          email: secondApplicantEmail,
+          phone: secondApplicantPhone,
+        };
+      }
+
       const response = await fetch('/api/applications/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyId: selectedPropertyId }),
+        body: JSON.stringify(requestBody),
       });
 
       console.log('📡 Response status:', response.status);
@@ -157,6 +189,12 @@ export default function TenantsPage() {
       if (data.success) {
         setGeneratedLink(data.fullLink);
         fetchApplications(); // Refresh applications list
+        
+        // Show notification status
+        const emailStatus = data.notifications?.primary?.emailSent ? '✅ Email sent' : '❌ Email failed';
+        const smsStatus = data.notifications?.primary?.smsSent ? '✅ SMS sent' : '❌ SMS failed';
+        
+        alert(`Application link generated!\n\n${emailStatus}\n${smsStatus}\n\nLink: ${data.fullLink}\n\nYou can copy and send this link manually if needed.`);
         console.log('✅ Application link generated:', data.fullLink);
       } else {
         console.error('❌ API returned error:', data.error, data.details);
@@ -170,10 +208,31 @@ export default function TenantsPage() {
     }
   };
 
+  const handleOpenModal = () => {
+    // Reset all form state when opening
+    setGeneratedLink('');
+    setSelectedPropertyId('');
+    setApplicantName('');
+    setApplicantEmail('');
+    setApplicantPhone('');
+    setHasSecondApplicant(false);
+    setSecondApplicantName('');
+    setSecondApplicantEmail('');
+    setSecondApplicantPhone('');
+    setShowNewApplicationModal(true);
+  };
+
   const handleCloseModal = () => {
     setShowNewApplicationModal(false);
     setGeneratedLink('');
     setSelectedPropertyId('');
+    setApplicantName('');
+    setApplicantEmail('');
+    setApplicantPhone('');
+    setHasSecondApplicant(false);
+    setSecondApplicantName('');
+    setSecondApplicantEmail('');
+    setSecondApplicantPhone('');
   };
 
   const copyLink = () => {
@@ -193,7 +252,7 @@ export default function TenantsPage() {
             </div>
             {activeTab === 'applications' && (
               <button
-                onClick={() => setShowNewApplicationModal(true)}
+                onClick={handleOpenModal}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
               >
                 <Plus className="h-5 w-5" />
@@ -321,7 +380,7 @@ export default function TenantsPage() {
                 <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 mb-4">No applications yet</p>
                 <button
-                  onClick={() => setShowNewApplicationModal(true)}
+                  onClick={handleOpenModal}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   <Plus className="h-5 w-5" />
@@ -422,23 +481,107 @@ export default function TenantsPage() {
 
             {!generatedLink ? (
               <>
-                <p className="text-sm text-gray-600 mb-4">Select a property to generate an application link for prospective tenants.</p>
+                <p className="text-sm text-gray-600 mb-4">Enter tenant information to generate an application link.</p>
 
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Property *</label>
-                  <select
-                    value={selectedPropertyId}
-                    onChange={(e) => setSelectedPropertyId(e.target.value)}
-                    onFocus={() => properties.length === 0 && fetchProperties()}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="">-- Select a property --</option>
-                    {properties.map((property) => (
-                      <option key={property.id} value={property.id}>
-                        {property.address}, {property.city}, {property.state} {property.zipCode}
-                      </option>
-                    ))}
-                  </select>
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Property *</label>
+                    <select
+                      value={selectedPropertyId}
+                      onChange={(e) => setSelectedPropertyId(e.target.value)}
+                      onFocus={() => properties.length === 0 && fetchProperties()}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">-- Select a property --</option>
+                      {properties.map((property) => (
+                        <option key={property.id} value={property.id}>
+                          {property.address}, {property.city}, {property.state} {property.zipCode}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Primary Applicant *</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                        <input
+                          type="text"
+                          value={applicantName}
+                          onChange={(e) => setApplicantName(e.target.value)}
+                          placeholder="Enter full name"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                        <input
+                          type="email"
+                          value={applicantEmail}
+                          onChange={(e) => setApplicantEmail(e.target.value)}
+                          placeholder="Enter email address"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                        <input
+                          type="tel"
+                          value={applicantPhone}
+                          onChange={(e) => setApplicantPhone(e.target.value)}
+                          placeholder="Enter phone number"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <label className="flex items-center gap-2 mb-3">
+                      <input
+                        type="checkbox"
+                        checked={hasSecondApplicant}
+                        onChange={(e) => setHasSecondApplicant(e.target.checked)}
+                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      />
+                      <span className="text-sm font-semibold text-gray-900">Add Second Applicant</span>
+                    </label>
+                    {hasSecondApplicant && (
+                      <div className="space-y-3 mt-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                          <input
+                            type="text"
+                            value={secondApplicantName}
+                            onChange={(e) => setSecondApplicantName(e.target.value)}
+                            placeholder="Enter full name"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                          <input
+                            type="email"
+                            value={secondApplicantEmail}
+                            onChange={(e) => setSecondApplicantEmail(e.target.value)}
+                            placeholder="Enter email address"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                          <input
+                            type="tel"
+                            value={secondApplicantPhone}
+                            onChange={(e) => setSecondApplicantPhone(e.target.value)}
+                            placeholder="Enter phone number"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-3">
@@ -450,7 +593,7 @@ export default function TenantsPage() {
                   </button>
                   <button
                     onClick={handleGenerateLink}
-                    disabled={!selectedPropertyId || generating}
+                    disabled={!selectedPropertyId || generating || !applicantName || !applicantEmail || !applicantPhone}
                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
                   >
                     {generating ? (
