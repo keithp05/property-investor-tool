@@ -102,16 +102,6 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
       return false;
     }
 
-    // IMPORTANT: Resend test mode only allows sending to the account owner's email
-    // In production, you need to verify a domain at resend.com/domains
-    const isTestMode = !process.env.RESEND_DOMAIN_VERIFIED;
-    const testEmail = 'keith.p05@gmail.com';
-
-    if (isTestMode) {
-      console.log('⚠️ Resend is in TEST MODE - emails can only be sent to:', testEmail);
-      console.log('⚠️ To send to other emails, verify a domain at resend.com/domains');
-    }
-
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -120,10 +110,10 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
       },
       body: JSON.stringify({
         from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
-        to: [isTestMode ? testEmail : to],
-        subject: isTestMode ? `[TEST MODE] ${subject} (Original: ${to})` : subject,
-        text: isTestMode ? `[Original recipient: ${to}]\n\n${body}` : body,
-        html: isTestMode ? `<p><strong>[Original recipient: ${to}]</strong></p>${html || body}` : (html || body),
+        to: [to],
+        subject: subject,
+        text: body,
+        html: html || body,
       }),
     });
 
@@ -138,9 +128,6 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
 
     const result = await response.json();
     console.log('✅ Email sent successfully:', result.id);
-    if (isTestMode) {
-      console.log('✅ Test mode: Email sent to', testEmail, 'instead of', to);
-    }
     return true;
   } catch (error: any) {
     console.error('❌ Failed to send email:', error.message || error);
