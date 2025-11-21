@@ -31,9 +31,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all applications for this landlord
+    // Note: landlordId in TenantApplication is the User ID, not LandlordProfile ID
     const applications = await prisma.tenantApplication.findMany({
       where: {
-        landlordId: landlordProfile.id,
+        landlordId: session.user.id,
       },
       include: {
         property: {
