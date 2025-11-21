@@ -1,12 +1,28 @@
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 
-const snsClient = new SNSClient({
-  region: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
-  },
-});
+// Initialize SNS client lazily to avoid issues with missing credentials
+let snsClient: SNSClient | null = null;
+
+const getSNSClient = () => {
+  if (!snsClient) {
+    const accessKeyId = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+
+    if (!accessKeyId || !secretAccessKey) {
+      console.error('❌ AWS SNS credentials not configured');
+      return null;
+    }
+
+    snsClient = new SNSClient({
+      region: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+  }
+  return snsClient;
+};
 
 interface SendSMSParams {
   phoneNumber: string;
@@ -25,13 +41,11 @@ interface SendEmailParams {
  */
 export async function sendSMS({ phoneNumber, message }: SendSMSParams): Promise<boolean> {
   try {
-    // Check if AWS credentials are configured
-    const accessKeyId = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
-
-    if (!accessKeyId || !secretAccessKey) {
-      console.error('❌ AWS credentials not configured for SMS');
-      console.error('Missing SNS_ACCESS_KEY_ID or SNS_SECRET_ACCESS_KEY');
+    // Get SNS client with credential validation
+    const client = getSNSClient();
+    if (!client) {
+      console.error('❌ AWS SNS not configured - cannot send SMS');
+      console.error('Please set SNS_ACCESS_KEY_ID and SNS_SECRET_ACCESS_KEY in environment variables');
       return false;
     }
 
@@ -59,7 +73,7 @@ export async function sendSMS({ phoneNumber, message }: SendSMSParams): Promise<
       },
     });
 
-    const result = await snsClient.send(command);
+    const result = await client.send(command);
     console.log('✅ SMS sent successfully. MessageId:', result.MessageId);
     return true;
   } catch (error: any) {
@@ -88,6 +102,16 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
       return false;
     }
 
+    // IMPORTANT: Resend test mode only allows sending to the account owner's email
+    // In production, you need to verify a domain at resend.com/domains
+    const isTestMode = !process.env.RESEND_DOMAIN_VERIFIED;
+    const testEmail = 'keith.p05@gmail.com';
+
+    if (isTestMode) {
+      console.log('⚠️ Resend is in TEST MODE - emails can only be sent to:', testEmail);
+      console.log('⚠️ To send to other emails, verify a domain at resend.com/domains');
+    }
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -96,10 +120,10 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
       },
       body: JSON.stringify({
         from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
-        to: [to],
-        subject: subject,
-        text: body,
-        html: html || body,
+        to: [isTestMode ? testEmail : to],
+        subject: isTestMode ? `[TEST MODE] ${subject} (Original: ${to})` : subject,
+        text: isTestMode ? `[Original recipient: ${to}]\n\n${body}` : body,
+        html: isTestMode ? `<p><strong>[Original recipient: ${to}]</strong></p>${html || body}` : (html || body),
       }),
     });
 
@@ -114,6 +138,9 @@ export async function sendEmail({ to, subject, body, html }: SendEmailParams): P
 
     const result = await response.json();
     console.log('✅ Email sent successfully:', result.id);
+    if (isTestMode) {
+      console.log('✅ Test mode: Email sent to', testEmail, 'instead of', to);
+    }
     return true;
   } catch (error: any) {
     console.error('❌ Failed to send email:', error.message || error);
