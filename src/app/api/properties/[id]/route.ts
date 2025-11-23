@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import axios from 'axios';
 
 /**
  * Delete a property owned by the authenticated landlord
@@ -233,7 +234,7 @@ export async function PUT(
 }
 
 /**
- * Get a single property by ID
+ * Get a single property by ID (supports both database IDs and external IDs like zillow-XXXXX)
  */
 export async function GET(
   request: NextRequest,
@@ -252,7 +253,53 @@ export async function GET(
 
     const { id: propertyId } = await params;
 
-    // Fetch property with related data
+    // Check if this is an external property ID (e.g., zillow-123456)
+    if (propertyId.startsWith('zillow-')) {
+      const zillowId = propertyId.replace('zillow-', '');
+
+      // Fetch from Zillow API
+      try {
+        const response = await axios.get('https://zillow56.p.rapidapi.com/property', {
+          params: { zpid: zillowId },
+          headers: {
+            'X-RapidAPI-Key': process.env.ZILLOW_API_KEY,
+            'X-RapidAPI-Host': 'zillow56.p.rapidapi.com'
+          }
+        });
+
+        // Transform Zillow data to match our property format
+        const zillowData = response.data;
+        const externalProperty = {
+          id: propertyId,
+          address: zillowData.address?.streetAddress || 'Unknown',
+          city: zillowData.address?.city || '',
+          state: zillowData.address?.state || '',
+          zipCode: zillowData.address?.zipcode || '',
+          estimatedValue: zillowData.price || zillowData.zestimate || null,
+          monthlyRent: zillowData.rentZestimate || null,
+          bedrooms: zillowData.bedrooms || 0,
+          bathrooms: zillowData.bathrooms || 0,
+          squareFeet: zillowData.livingArea || null,
+          yearBuilt: zillowData.yearBuilt || null,
+          propertyType: zillowData.homeType || 'Unknown',
+          source: 'zillow',
+          isExternal: true, // Flag to indicate this is not in our database
+        };
+
+        return NextResponse.json({
+          success: true,
+          property: externalProperty,
+        });
+      } catch (error) {
+        console.error('❌ Error fetching Zillow property:', error);
+        return NextResponse.json(
+          { success: false, error: 'Failed to fetch property from Zillow' },
+          { status: 404 }
+        );
+      }
+    }
+
+    // Regular database property fetch
     const property = await prisma.property.findUnique({
       where: { id: propertyId },
       include: {
