@@ -2,7 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
-import { ArrowLeft, MapPin, Home, TrendingUp, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building, Camera, X, Upload } from 'lucide-react';
+import { ArrowLeft, MapPin, Home, TrendingUp, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building, Camera, X, Upload, Plus, Edit3 } from 'lucide-react';
 
 interface ExpertAnalysis {
   expertName: string;
@@ -67,6 +67,7 @@ function PropertyAnalysisContent() {
   const [error, setError] = useState<string | null>(null);
 
   // Cash flow calculator state
+  const [offerPrice, setOfferPrice] = useState(0); // YOUR offer price
   const [downPaymentPercent, setDownPaymentPercent] = useState(20);
   const [interestRate, setInterestRate] = useState(7.5);
   const [loanTermYears, setLoanTermYears] = useState(30);
@@ -95,6 +96,18 @@ function PropertyAnalysisContent() {
   const [propertyPhotos, setPropertyPhotos] = useState<string[]>([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
+  // Manual comps upload
+  const [manualComps, setManualComps] = useState<any[]>([]);
+  const [showCompForm, setShowCompForm] = useState(false);
+  const [newComp, setNewComp] = useState({
+    address: '',
+    price: '',
+    bedrooms: '',
+    bathrooms: '',
+    sqft: '',
+    soldDate: '',
+  });
+
   // Extract property details from URL
   const address = searchParams.get('address') || 'Unknown Address';
   const city = searchParams.get('city') || 'Unknown';
@@ -107,18 +120,24 @@ function PropertyAnalysisContent() {
     loadPropertyAnalysis();
   }, [params.id]);
 
-  // Auto-calculate property tax (estimate 1.5% annually for Texas)
+  // Initialize offer price to listing price
   useEffect(() => {
-    if (report) {
-      const purchasePrice = Number(price);
-      const estimatedAnnualTax = purchasePrice * 0.015; // 1.5% for Texas
+    if (price && offerPrice === 0) {
+      setOfferPrice(Number(price));
+    }
+  }, [price]);
+
+  // Auto-calculate property tax based on offer price
+  useEffect(() => {
+    if (offerPrice > 0) {
+      const estimatedAnnualTax = offerPrice * 0.015; // 1.5% for Texas
       setPropertyTax(Math.round(estimatedAnnualTax / 12));
     }
-  }, [report, price]);
+  }, [offerPrice]);
 
-  // Calculate mortgage payment using standard mortgage formula
+  // Calculate mortgage payment using offer price
   const calculateMortgage = () => {
-    const purchasePrice = Number(price);
+    const purchasePrice = offerPrice || Number(price);
     const downPayment = purchasePrice * (downPaymentPercent / 100);
     const loanAmount = purchasePrice - downPayment;
     const monthlyRate = interestRate / 100 / 12;
@@ -218,6 +237,41 @@ function PropertyAnalysisContent() {
   // Remove photo
   const removePhoto = (index: number) => {
     setPropertyPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Add manual comp
+  const addManualComp = () => {
+    if (!newComp.address || !newComp.price) {
+      alert('Please enter at least an address and price');
+      return;
+    }
+
+    const comp = {
+      id: Date.now().toString(),
+      address: newComp.address,
+      price: Number(newComp.price),
+      bedrooms: Number(newComp.bedrooms) || 0,
+      bathrooms: Number(newComp.bathrooms) || 0,
+      sqft: Number(newComp.sqft) || 0,
+      soldDate: newComp.soldDate || new Date().toISOString().split('T')[0],
+      source: 'manual',
+    };
+
+    setManualComps(prev => [...prev, comp]);
+    setNewComp({
+      address: '',
+      price: '',
+      bedrooms: '',
+      bathrooms: '',
+      sqft: '',
+      soldDate: '',
+    });
+    setShowCompForm(false);
+  };
+
+  // Remove manual comp
+  const removeManualComp = (id: string) => {
+    setManualComps(prev => prev.filter(comp => comp.id !== id));
   };
 
   async function loadPropertyAnalysis() {
@@ -363,10 +417,178 @@ function PropertyAnalysisContent() {
             Monthly Cash Flow Calculator
           </h2>
           <div className="bg-white rounded-lg shadow-lg p-6">
+            {/* Offer Price Section */}
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Edit3 className="h-5 w-5 text-yellow-600" />
+                Your Offer Price
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Listing Price (Asking)</label>
+                  <div className="text-2xl font-bold text-gray-500">${Number(price).toLocaleString()}</div>
+                  <p className="text-xs text-gray-500 mt-1">Seller's asking price</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Your Offer Price *</label>
+                  <input
+                    type="number"
+                    value={offerPrice}
+                    onChange={(e) => setOfferPrice(Number(e.target.value))}
+                    className="w-full px-4 py-2 text-2xl font-bold border-2 border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white"
+                    placeholder="Enter your offer"
+                  />
+                  <p className="text-xs text-gray-600 mt-1">This will be used for all calculations</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Manual Comps Section */}
+            <div className="border-t pt-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Home className="h-5 w-5 text-indigo-600" />
+                  Your Comparable Sales (Comps)
+                </h3>
+                <button
+                  onClick={() => setShowCompForm(!showCompForm)}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Comp
+                </button>
+              </div>
+
+              {/* Comp Form */}
+              {showCompForm && (
+                <div className="bg-gray-50 rounded-lg p-4 mb-4 border-2 border-gray-200">
+                  <h4 className="font-semibold text-gray-900 mb-3">Add New Comparable</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Address *</label>
+                      <input
+                        type="text"
+                        value={newComp.address}
+                        onChange={(e) => setNewComp({...newComp, address: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="123 Main St, City, ST"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Sold Price *</label>
+                      <input
+                        type="number"
+                        value={newComp.price}
+                        onChange={(e) => setNewComp({...newComp, price: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="250000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Bedrooms</label>
+                      <input
+                        type="number"
+                        value={newComp.bedrooms}
+                        onChange={(e) => setNewComp({...newComp, bedrooms: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="3"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Bathrooms</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={newComp.bathrooms}
+                        onChange={(e) => setNewComp({...newComp, bathrooms: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Square Feet</label>
+                      <input
+                        type="number"
+                        value={newComp.sqft}
+                        onChange={(e) => setNewComp({...newComp, sqft: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="1500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Sold Date</label>
+                      <input
+                        type="date"
+                        value={newComp.soldDate}
+                        onChange={(e) => setNewComp({...newComp, soldDate: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={addManualComp}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                    >
+                      Save Comp
+                    </button>
+                    <button
+                      onClick={() => setShowCompForm(false)}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Comp List */}
+              {manualComps.length > 0 && (
+                <div className="space-y-2">
+                  {manualComps.map((comp) => (
+                    <div key={comp.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{comp.address}</p>
+                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                          <span className="font-bold text-green-600">${comp.price.toLocaleString()}</span>
+                          {comp.bedrooms > 0 && <span>{comp.bedrooms} BR</span>}
+                          {comp.bathrooms > 0 && <span>{comp.bathrooms} BA</span>}
+                          {comp.sqft > 0 && <span>{comp.sqft.toLocaleString()} sqft</span>}
+                          {comp.sqft > 0 && comp.price > 0 && <span>${Math.round(comp.price / comp.sqft)}/sqft</span>}
+                          <span className="text-gray-400">Sold: {new Date(comp.soldDate).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeManualComp(comp.id)}
+                        className="ml-4 text-red-500 hover:text-red-700"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="bg-blue-50 rounded-lg p-3 mt-4">
+                    <p className="text-sm font-semibold text-gray-700">Average Comp Price: ${Math.round(manualComps.reduce((sum, comp) => sum + comp.price, 0) / manualComps.length).toLocaleString()}</p>
+                    {manualComps.some(c => c.sqft > 0) && (
+                      <p className="text-sm text-gray-600 mt-1">Average Price/Sqft: ${Math.round(manualComps.filter(c => c.sqft > 0).reduce((sum, comp) => sum + (comp.price / comp.sqft), 0) / manualComps.filter(c => c.sqft > 0).length)}/sqft</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {manualComps.length === 0 && !showCompForm && (
+                <div className="text-center py-8 text-gray-500">
+                  <Home className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+                  <p>No comps added yet. Add your own comparable sales data.</p>
+                </div>
+              )}
+            </div>
+
             {/* Mortgage & Expense Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Down Payment %</label>
+            <div className="border-t pt-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Financing Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Down Payment %</label>
                 <input
                   type="number"
                   value={downPaymentPercent}
