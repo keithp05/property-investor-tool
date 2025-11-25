@@ -118,8 +118,12 @@ export default function AddressAutocomplete({
           {suggestions.map((suggestion) => (
             <button
               key={suggestion.placeId}
-              onClick={() => handleSelectSuggestion(suggestion)}
-              className="w-full px-4 py-3 text-left hover:bg-indigo-50 transition-colors flex items-start gap-3 border-b border-gray-100 last:border-b-0"
+              onMouseDown={(e) => {
+                e.preventDefault(); // Prevent input blur
+                handleSelectSuggestion(suggestion);
+              }}
+              onClick={(e) => e.preventDefault()} // Backup for touch devices
+              className="w-full px-4 py-3 text-left hover:bg-indigo-50 transition-colors flex items-start gap-3 border-b border-gray-100 last:border-b-0 cursor-pointer"
             >
               <MapPin className="h-5 w-5 text-indigo-600 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
