@@ -259,11 +259,11 @@ export async function GET(
 
       // Fetch from Zillow API
       try {
-        const response = await axios.get('https://zillow56.p.rapidapi.com/property', {
+        const response = await axios.get('https://zillow-com1.p.rapidapi.com/property', {
           params: { zpid: zillowId },
           headers: {
             'X-RapidAPI-Key': process.env.ZILLOW_API_KEY,
-            'X-RapidAPI-Host': 'zillow56.p.rapidapi.com'
+            'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
           }
         });
 
