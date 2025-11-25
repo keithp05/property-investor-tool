@@ -71,36 +71,6 @@ export async function PATCH(
 
     console.log(`✅ Application ${applicationId} ${status}`);
 
-    // If approved, create tenant profile (if doesn't exist)
-    if (status === 'APPROVED') {
-      try {
-        // Check if tenant profile exists
-        const existingTenant = await prisma.tenantProfile.findFirst({
-          where: {
-            email: application.applicantEmail,
-          },
-        });
-
-        if (!existingTenant) {
-          // Create tenant profile
-          await prisma.tenantProfile.create({
-            data: {
-              name: application.applicantName,
-              email: application.applicantEmail,
-              phone: application.applicantPhone || '',
-              currentAddress: application.currentAddress || '',
-              employmentStatus: application.employmentStatus || '',
-              annualIncome: application.annualIncome ? parseFloat(application.annualIncome.toString()) : null,
-            },
-          });
-          console.log(`✅ Created tenant profile for ${application.applicantEmail}`);
-        }
-      } catch (error) {
-        console.error('⚠️ Failed to create tenant profile:', error);
-        // Don't fail the whole request if tenant profile creation fails
-      }
-    }
-
     return NextResponse.json({
       success: true,
       application: updatedApplication,
