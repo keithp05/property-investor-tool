@@ -58,7 +58,6 @@ export async function PATCH(request: NextRequest) {
       where: { id: applicationId },
       data: {
         status,
-        reviewedAt: new Date(),
       },
       include: {
         property: true,
