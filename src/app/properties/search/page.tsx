@@ -1,9 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, MapPin, DollarSign, Home, TrendingUp, Navigation } from 'lucide-react';
+import { Search, MapPin, DollarSign, Home, TrendingUp, Navigation, History, Clock, X } from 'lucide-react';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
+
+interface SearchHistoryItem {
+  id: string;
+  searchParams: {
+    city: string;
+    state: string;
+    zipcode: string;
+    address: string;
+    minPrice: string;
+    maxPrice: string;
+    minBedrooms: string;
+    maxBedrooms: string;
+    propertyType: string;
+  };
+  timestamp: number;
+  resultsCount: number;
+  searchType: 'city' | 'zipcode' | 'address';
+}
 
 export default function PropertySearchPage() {
   const router = useRouter();
@@ -23,6 +41,20 @@ export default function PropertySearchPage() {
   const [loading, setLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
+
+  // Load search history from localStorage on mount
+  useEffect(() => {
+    const history = localStorage.getItem('propertySearchHistory');
+    if (history) {
+      try {
+        setSearchHistory(JSON.parse(history));
+      } catch (error) {
+        console.error('Error loading search history:', error);
+      }
+    }
+  }, []);
 
   const handleGPSSearch = async () => {
     if (!navigator.geolocation) {
@@ -71,6 +103,34 @@ export default function PropertySearchPage() {
     );
   };
 
+  const saveToHistory = (resultsCount: number) => {
+    const historyItem: SearchHistoryItem = {
+      id: Date.now().toString(),
+      searchParams: { ...searchParams },
+      timestamp: Date.now(),
+      resultsCount,
+      searchType: searchMode,
+    };
+
+    const updatedHistory = [historyItem, ...searchHistory]
+      .slice(0, 10); // Keep only last 10 searches
+
+    setSearchHistory(updatedHistory);
+    localStorage.setItem('propertySearchHistory', JSON.stringify(updatedHistory));
+  };
+
+  const loadFromHistory = (item: SearchHistoryItem) => {
+    setSearchParams(item.searchParams);
+    setSearchMode(item.searchType);
+    setShowHistory(false);
+  };
+
+  const clearHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem('propertySearchHistory');
+    setShowHistory(false);
+  };
+
   const handleSearch = async () => {
     setLoading(true);
     try {
@@ -94,6 +154,7 @@ export default function PropertySearchPage() {
       const data = await response.json();
       if (data.success) {
         setProperties(data.properties);
+        saveToHistory(data.properties.length);
       }
     } catch (error) {
       console.error('Search error:', error);
@@ -381,20 +442,137 @@ export default function PropertySearchPage() {
             </div>
           </div>
 
-          <button
-            onClick={handleSearch}
-            disabled={
-              loading ||
-              (searchMode === 'city' && (!searchParams.city || !searchParams.state)) ||
-              (searchMode === 'zipcode' && !searchParams.zipcode) ||
-              (searchMode === 'address' && !searchParams.address)
-            }
-            className="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-          >
-            <Search className="h-5 w-5" />
-            <span>{loading ? 'Searching...' : 'Search Properties'}</span>
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleSearch}
+              disabled={
+                loading ||
+                (searchMode === 'city' && (!searchParams.city || !searchParams.state)) ||
+                (searchMode === 'zipcode' && !searchParams.zipcode) ||
+                (searchMode === 'address' && !searchParams.address)
+              }
+              className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <Search className="h-5 w-5" />
+              <span>{loading ? 'Searching...' : 'Search Properties'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="relative bg-gray-100 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-200 transition flex items-center space-x-2"
+              title="Search History"
+            >
+              <History className="h-5 w-5" />
+              {searchHistory.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                  {searchHistory.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Search History Modal */}
+        {showHistory && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <History className="h-6 w-6" />
+                  Search History
+                </h2>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-gray-400 hover:text-gray-600 transition"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[60vh]">
+                {searchHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Clock className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg">No search history yet</p>
+                    <p className="text-gray-400 text-sm mt-2">Your recent searches will appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {searchHistory.map((item) => {
+                      const date = new Date(item.timestamp);
+                      const searchDescription =
+                        item.searchType === 'city' ? `${item.searchParams.city}, ${item.searchParams.state}` :
+                        item.searchType === 'zipcode' ? `ZIP ${item.searchParams.zipcode}` :
+                        item.searchParams.address;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 hover:bg-indigo-50 transition cursor-pointer"
+                          onClick={() => loadFromHistory(item)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <MapPin className="h-4 w-4 text-indigo-600" />
+                                <h3 className="font-semibold text-gray-900">{searchDescription}</h3>
+                              </div>
+
+                              <div className="flex items-center gap-4 text-sm text-gray-600 mt-2">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Home className="h-3 w-3" />
+                                  {item.resultsCount} {item.resultsCount === 1 ? 'result' : 'results'}
+                                </span>
+                              </div>
+
+                              {/* Price Range */}
+                              {(item.searchParams.minPrice || item.searchParams.maxPrice) && (
+                                <div className="mt-2 text-sm text-gray-600">
+                                  <DollarSign className="h-3 w-3 inline mr-1" />
+                                  {item.searchParams.minPrice && `$${parseInt(item.searchParams.minPrice).toLocaleString()}`}
+                                  {item.searchParams.minPrice && item.searchParams.maxPrice && ' - '}
+                                  {item.searchParams.maxPrice && `$${parseInt(item.searchParams.maxPrice).toLocaleString()}`}
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => loadFromHistory(item)}
+                              className="ml-4 text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+                            >
+                              Load Search
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {searchHistory.length > 0 && (
+                <div className="p-6 border-t bg-gray-50 flex justify-between">
+                  <button
+                    onClick={clearHistory}
+                    className="text-red-600 hover:text-red-700 font-medium"
+                  >
+                    Clear All History
+                  </button>
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Results */}
         {properties.length > 0 && (
