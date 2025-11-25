@@ -95,6 +95,19 @@ export default function PropertyDetailsPage() {
       const result = await response.json();
 
       if (result.success) {
+        // Redirect external properties (Zillow) to analyze page
+        if (result.property.isExternal) {
+          const queryParams = new URLSearchParams({
+            address: result.property.address,
+            city: result.property.city,
+            state: result.property.state,
+            zipCode: result.property.zipCode,
+            price: (result.property.estimatedValue || 0).toString(),
+            type: 'zillow'
+          });
+          router.push(`/properties/${params.id}/analyze?${queryParams.toString()}`);
+          return;
+        }
         setProperty(result.property);
       } else {
         setError(result.error);

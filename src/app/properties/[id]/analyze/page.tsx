@@ -131,7 +131,7 @@ function PropertyAnalysisContent() {
         <div className="text-center">
           <Loader2 className="h-16 w-16 text-indigo-600 mx-auto mb-4 animate-spin" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Analyzing Property</h2>
-          <p className="text-gray-600">Running 3-expert AI analysis...</p>
+          <p className="text-gray-600">Running 5-expert AI analysis (3 traditional + 2 short-term rental)...</p>
         </div>
       </div>
     );
@@ -296,6 +296,75 @@ function PropertyAnalysisContent() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Short-Term Rental Analysis */}
+        {report.shortTermRental && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+              <Home className="h-7 w-7 text-indigo-600" />
+              Short-Term Rental Analysis (Airbnb / VRBO)
+            </h2>
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-1">Average Nightly Rate</p>
+                  <p className="text-2xl font-bold text-purple-600">${report.shortTermRental.averageNightlyRate}/night</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-1">Est. Monthly Revenue (Net)</p>
+                  <p className="text-2xl font-bold text-green-600">${report.shortTermRental.estimatedMonthlyRevenue.toLocaleString()}/mo</p>
+                  <p className="text-xs text-green-700 mt-1">+{report.shortTermRental.vsTraditionalRental}% vs traditional</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-1">Expected Occupancy</p>
+                  <p className="text-2xl font-bold text-blue-600">{report.shortTermRental.occupancyRate}%</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Market Info</h4>
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-700"><span className="font-semibold">Platform:</span> {report.shortTermRental.platform}</p>
+                    <p className="text-sm text-gray-700"><span className="font-semibold">Seasonal Demand:</span> {report.shortTermRental.seasonalDemand}</p>
+                    <p className="text-sm text-gray-700"><span className="font-semibold">Competition:</span> {report.shortTermRental.competitionLevel}</p>
+                    <p className="text-sm text-gray-700"><span className="font-semibold">Annual Revenue:</span> ${report.shortTermRental.projectedAnnualRevenue.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Regulations & Requirements</h4>
+                  <div className="space-y-2">
+                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm ${
+                      report.shortTermRental.regulations.permitsRequired
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {report.shortTermRental.regulations.permitsRequired ? (
+                        <>
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Permits Required</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          <span>No Permits Required</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-700 mt-2"><span className="font-semibold">Max Nights/Year:</span> {report.shortTermRental.regulations.maxNightsPerYear}</p>
+                    <p className="text-sm text-gray-600 italic">{report.shortTermRental.regulations.restrictions}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-purple-50 rounded-lg p-4 border-2 border-purple-200">
+                <h4 className="font-semibold text-purple-900 mb-2">Recommendation</h4>
+                <p className="text-purple-800 text-sm">{report.shortTermRental.recommendation}</p>
+              </div>
             </div>
           </div>
         )}

@@ -301,14 +301,58 @@ class PropertyAnalysisService {
   }
 
   /**
-   * Generate 3 Expert Analyses (Aggressive, Conservative, Government Housing)
+   * Generate Short-Term Rental Analysis (Airbnb estimates)
    */
-  private async generate3ExpertAnalyses(
+  private async generateShortTermRentalAnalysis(
+    property: any,
+    estimatedRent: number
+  ): Promise<ShortTermRental> {
+    const bedrooms = property.bedrooms || 2;
+
+    // Estimate nightly rate based on traditional rent (typically 1.5-2x daily equivalent)
+    const dailyRentEquivalent = estimatedRent / 30;
+    const estimatedNightlyRate = Math.round(dailyRentEquivalent * 1.75);
+
+    // Estimate occupancy rate (typically 60-75% for good STR properties)
+    const occupancyRate = 70;
+    const occupiedNights = Math.round((30 * occupancyRate) / 100);
+
+    // Calculate monthly revenue
+    const grossMonthlyRevenue = estimatedNightlyRate * occupiedNights;
+
+    // Subtract platform fees and operating costs (typically 25-30% of gross)
+    const platformFees = Math.round(grossMonthlyRevenue * 0.08); // Airbnb ~3%, VRBO ~5%
+    const operatingCosts = Math.round(grossMonthlyRevenue * 0.20); // Cleaning, utilities, supplies
+    const netMonthlyRevenue = grossMonthlyRevenue - platformFees - operatingCosts;
+
+    return {
+      platform: 'Airbnb / VRBO',
+      averageNightlyRate: estimatedNightlyRate,
+      occupancyRate,
+      estimatedMonthlyRevenue: netMonthlyRevenue,
+      seasonalDemand: 'Year-round with seasonal peaks',
+      competitionLevel: 'Moderate',
+      regulations: {
+        permitsRequired: true,
+        maxNightsPerYear: 365,
+        restrictions: 'Verify local STR ordinances - some areas have restrictions',
+      },
+      projectedAnnualRevenue: netMonthlyRevenue * 12,
+      vsTraditionalRental: Math.round(((netMonthlyRevenue / estimatedRent) - 1) * 100),
+      recommendation: `Short-term rental could generate approximately ${Math.round(((netMonthlyRevenue / estimatedRent) - 1) * 100)}% more income than traditional rental, but requires active management and furnishing investment ($15-25K).`,
+    };
+  }
+
+  /**
+   * Generate 5 Expert Analyses (Aggressive, Conservative, Government Housing, + 2 Short-Term Rental)
+   */
+  private async generate5ExpertAnalyses(
     property: any,
     comps: PropertyComp[],
     rentalComps: RentalComp[],
     crimeScore: CrimeScore,
-    governmentHousing: GovernmentHousingAnalysis
+    governmentHousing: GovernmentHousingAnalysis,
+    shortTermRental?: ShortTermRental
   ): Promise<ExpertAnalysis[]> {
     const avgCompPrice = comps.reduce((sum, comp) => sum + comp.price, 0) / comps.length;
     const avgRent = rentalComps.reduce((sum, comp) => sum + comp.monthlyRent, 0) / rentalComps.length;
@@ -357,6 +401,50 @@ class PropertyAnalysisService {
           concerns: ['HQS inspection requirements', 'Tenant screening important'],
           recommendation: 'STRONG_BUY',
         },
+        {
+          expertName: 'Sarah Martinez, Airbnb Superhost',
+          expertType: 'short_term_rental',
+          summary: 'Short-term rental expert with 500+ properties managed across vacation markets.',
+          recommendedOffer: Math.round(askingPrice * 0.80),
+          exitStrategy: 'Airbnb/VRBO short-term rental - premium nightly rates',
+          estimatedROI: shortTermRental ? Math.round((shortTermRental.estimatedMonthlyRevenue * 12 / askingPrice) * 100) : 28,
+          riskAssessment: 'Medium risk. Higher returns but requires active management and guest services.',
+          strengths: [
+            `Est. nightly rate: $${shortTermRental?.averageNightlyRate || Math.round(avgRent / 20)}/night`,
+            `Projected monthly: $${shortTermRental?.estimatedMonthlyRevenue.toLocaleString() || Math.round(avgRent * 2.5).toLocaleString()}`,
+            'Premium income potential',
+            'Flexibility for personal use',
+          ],
+          concerns: [
+            'Local STR regulations must be verified',
+            'Requires furnishing & professional photos',
+            'Higher management intensity',
+            `Occupancy rate: ${shortTermRental?.occupancyRate || 70}%`,
+          ],
+          recommendation: 'BUY',
+        },
+        {
+          expertName: 'James Park, STR Portfolio Manager',
+          expertType: 'short_term_rental',
+          summary: 'Corporate STR investor managing $15M+ in short-term rental properties nationwide.',
+          recommendedOffer: Math.round(askingPrice * 0.82),
+          exitStrategy: 'Professional STR operation with dynamic pricing and automation',
+          estimatedROI: shortTermRental ? Math.round((shortTermRental.estimatedMonthlyRevenue * 12 / askingPrice) * 100) - 3 : 25,
+          riskAssessment: 'Medium risk. Market-dependent but scalable with proper systems.',
+          strengths: [
+            'Higher gross income vs traditional rental',
+            'Market demand exists in area',
+            'Can pivot to mid-term rental if needed',
+            'Tax advantages through active participation',
+          ],
+          concerns: [
+            'Startup costs: $15-25K for furniture/setup',
+            'Platform fees (Airbnb 3%, VRBO 5-8%)',
+            'Seasonal demand fluctuations',
+            'Competition from hotels and other STRs',
+          ],
+          recommendation: 'HOLD',
+        },
       ];
     }
 
@@ -401,6 +489,48 @@ class PropertyAnalysisService {
         ],
         concerns: ['Annual HQS inspections required', 'Voucher availability'],
         recommendation: 'STRONG_BUY',
+      },
+      {
+        expertName: 'Sarah Martinez, Airbnb Superhost',
+        expertType: 'short_term_rental',
+        summary: 'Strong short-term rental opportunity with excellent location fundamentals and tourism demand.',
+        recommendedOffer: Math.round(askingPrice * 0.79),
+        exitStrategy: 'Premium Airbnb/VRBO operation with professional management',
+        estimatedROI: shortTermRental ? Math.round((shortTermRental.estimatedMonthlyRevenue * 12 / askingPrice) * 100) : 30,
+        riskAssessment: 'Medium risk with high reward potential through dynamic pricing strategies.',
+        strengths: [
+          `Nightly rate potential: $${shortTermRental?.averageNightlyRate || Math.round(avgRent / 18)}/night`,
+          `Monthly revenue: $${shortTermRental?.estimatedMonthlyRevenue.toLocaleString() || Math.round(avgRent * 2.8).toLocaleString()}`,
+          'High tourism/business travel demand',
+          'Strong comps in area',
+        ],
+        concerns: [
+          'Verify local STR regulations',
+          'Initial setup: $18-22K investment',
+          'Management time commitment',
+        ],
+        recommendation: 'STRONG_BUY',
+      },
+      {
+        expertName: 'James Park, STR Portfolio Manager',
+        expertType: 'short_term_rental',
+        summary: 'Professional STR analysis shows solid fundamentals but competitive market requires excellence.',
+        recommendedOffer: Math.round(askingPrice * 0.81),
+        exitStrategy: 'Automated STR with PMS system and dynamic pricing optimization',
+        estimatedROI: shortTermRental ? Math.round((shortTermRental.estimatedMonthlyRevenue * 12 / askingPrice) * 100) - 4 : 26,
+        riskAssessment: 'Medium risk. Returns dependent on occupancy optimization and guest experience.',
+        strengths: [
+          '2-3x traditional rental income potential',
+          'Strong market fundamentals',
+          'Exit flexibility (can convert to LTR)',
+        ],
+        concerns: [
+          'Platform competition increasing',
+          'Seasonal occupancy variations',
+          'Operational complexity',
+          'Furniture/maintenance capital required',
+        ],
+        recommendation: 'BUY',
       },
     ];
   }
@@ -532,13 +662,17 @@ Provide analysis in this JSON format:
       high: Math.round(estimatedRent * 1.1),
     };
 
-    // Generate 3 expert analyses
-    const expertAnalyses = await this.generate3ExpertAnalyses(
+    // Generate short-term rental analysis (Airbnb estimates)
+    const shortTermRental = await this.generateShortTermRentalAnalysis(property, estimatedRent);
+
+    // Generate 5 expert analyses (includes 2 STR experts)
+    const expertAnalyses = await this.generate5ExpertAnalyses(
       property,
       comps,
       rentalComps,
       crimeScore,
-      governmentHousing
+      governmentHousing,
+      shortTermRental
     );
 
     // Generate legacy AI analysis (for backwards compatibility)
@@ -554,13 +688,14 @@ Provide analysis in this JSON format:
       estimatedRent,
       rentRange,
       crimeScore,
-      expertAnalyses,       // NEW: 3 expert opinions
+      expertAnalyses,       // NEW: 5 expert opinions (3 traditional + 2 STR)
       governmentHousing,    // NEW: Government housing analysis
+      shortTermRental,      // NEW: Short-term rental (Airbnb) analysis
       aiAnalysis,           // Legacy analysis
       generatedAt: new Date(),
     };
 
-    console.log('✅ CMA Report generated successfully with 3 expert analyses');
+    console.log('✅ CMA Report generated successfully with 5 expert analyses (3 traditional + 2 STR)');
     return report;
   }
 }
