@@ -66,6 +66,15 @@ function PropertyAnalysisContent() {
   const [report, setReport] = useState<CMAReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Cash flow calculator state
+  const [downPaymentPercent, setDownPaymentPercent] = useState(20);
+  const [interestRate, setInterestRate] = useState(7.5);
+  const [loanTermYears, setLoanTermYears] = useState(30);
+  const [monthlyRepairs, setMonthlyRepairs] = useState(200);
+  const [propertyTax, setPropertyTax] = useState(0);
+  const [insurance, setInsurance] = useState(150);
+  const [hoa, setHoa] = useState(0);
+
   // Extract property details from URL
   const address = searchParams.get('address') || 'Unknown Address';
   const city = searchParams.get('city') || 'Unknown';
@@ -77,6 +86,50 @@ function PropertyAnalysisContent() {
   useEffect(() => {
     loadPropertyAnalysis();
   }, [params.id]);
+
+  // Auto-calculate property tax (estimate 1.5% annually for Texas)
+  useEffect(() => {
+    if (report) {
+      const purchasePrice = Number(price);
+      const estimatedAnnualTax = purchasePrice * 0.015; // 1.5% for Texas
+      setPropertyTax(Math.round(estimatedAnnualTax / 12));
+    }
+  }, [report, price]);
+
+  // Calculate mortgage payment using standard mortgage formula
+  const calculateMortgage = () => {
+    const purchasePrice = Number(price);
+    const downPayment = purchasePrice * (downPaymentPercent / 100);
+    const loanAmount = purchasePrice - downPayment;
+    const monthlyRate = interestRate / 100 / 12;
+    const numPayments = loanTermYears * 12;
+
+    if (monthlyRate === 0) {
+      return Math.round(loanAmount / numPayments);
+    }
+
+    const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
+    return Math.round(monthlyPayment);
+  };
+
+  // Calculate total monthly expenses
+  const calculateMonthlyExpenses = () => {
+    const mortgage = calculateMortgage();
+    return {
+      mortgage,
+      propertyTax,
+      insurance,
+      repairs: monthlyRepairs,
+      hoa,
+      total: mortgage + propertyTax + insurance + monthlyRepairs + hoa
+    };
+  };
+
+  // Calculate cash flow for different rental strategies
+  const calculateCashFlow = (monthlyIncome: number) => {
+    const expenses = calculateMonthlyExpenses();
+    return monthlyIncome - expenses.total;
+  };
 
   async function loadPropertyAnalysis() {
     try {
@@ -209,6 +262,154 @@ function PropertyAnalysisContent() {
               <div className={`rounded-lg p-4 border-2 ${getCrimeScoreColor(report.crimeScore.overallScore)}`}>
                 <p className="text-sm mb-1">Safety Score</p>
                 <p className="text-2xl font-bold">{report.crimeScore.overallScore}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Cash Flow Calculator */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+            <DollarSign className="h-7 w-7 text-indigo-600" />
+            Monthly Cash Flow Calculator
+          </h2>
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            {/* Mortgage & Expense Inputs */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Down Payment %</label>
+                <input
+                  type="number"
+                  value={downPaymentPercent}
+                  onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  min="0"
+                  max="100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Interest Rate %</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={interestRate}
+                  onChange={(e) => setInterestRate(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Loan Term (Years)</label>
+                <select
+                  value={loanTermYears}
+                  onChange={(e) => setLoanTermYears(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="15">15 Years</option>
+                  <option value="20">20 Years</option>
+                  <option value="30">30 Years</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Monthly Repairs</label>
+                <input
+                  type="number"
+                  value={monthlyRepairs}
+                  onChange={(e) => setMonthlyRepairs(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Property Tax/mo</label>
+                <input
+                  type="number"
+                  value={propertyTax}
+                  onChange={(e) => setPropertyTax(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Insurance/mo</label>
+                <input
+                  type="number"
+                  value={insurance}
+                  onChange={(e) => setInsurance(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">HOA/mo</label>
+                <input
+                  type="number"
+                  value={hoa}
+                  onChange={(e) => setHoa(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Monthly Expenses Breakdown */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Monthly Expenses Breakdown</h3>
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                <div>
+                  <p className="text-xs text-gray-600">Mortgage (P&I)</p>
+                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses().mortgage.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Property Tax</p>
+                  <p className="text-lg font-bold text-gray-900">${propertyTax.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Insurance</p>
+                  <p className="text-lg font-bold text-gray-900">${insurance.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Repairs</p>
+                  <p className="text-lg font-bold text-gray-900">${monthlyRepairs.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">HOA</p>
+                  <p className="text-lg font-bold text-gray-900">${hoa.toLocaleString()}</p>
+                </div>
+                <div className="bg-indigo-100 rounded-lg p-2">
+                  <p className="text-xs text-indigo-700 font-semibold">Total Expenses</p>
+                  <p className="text-lg font-bold text-indigo-900">${calculateMonthlyExpenses().total.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Cash Flow Projections */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">Monthly Cash Flow by Strategy</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4 border-2 border-blue-200">
+                  <p className="text-sm text-gray-600 mb-1">Traditional Rental</p>
+                  <p className="text-xl font-bold text-blue-600">${report.estimatedRent.toLocaleString()}/mo</p>
+                  <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.estimatedRent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    Cash Flow: ${calculateCashFlow(report.estimatedRent).toLocaleString()}/mo
+                  </p>
+                </div>
+                {report.governmentHousing && (
+                  <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
+                    <p className="text-sm text-gray-600 mb-1">Section 8</p>
+                    <p className="text-xl font-bold text-green-600">${report.governmentHousing.fairMarketRent.toLocaleString()}/mo</p>
+                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.governmentHousing.fairMarketRent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      Cash Flow: ${calculateCashFlow(report.governmentHousing.fairMarketRent).toLocaleString()}/mo
+                    </p>
+                  </div>
+                )}
+                {report.shortTermRental && (
+                  <div className="bg-purple-50 rounded-lg p-4 border-2 border-purple-200">
+                    <p className="text-sm text-gray-600 mb-1">Short-Term Rental</p>
+                    <p className="text-xl font-bold text-purple-600">${report.shortTermRental.estimatedMonthlyRevenue.toLocaleString()}/mo</p>
+                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      Cash Flow: ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue).toLocaleString()}/mo
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
