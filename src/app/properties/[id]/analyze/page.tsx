@@ -395,9 +395,9 @@ function PropertyAnalysisContent() {
                 {report.governmentHousing && (
                   <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
                     <p className="text-sm text-gray-600 mb-1">Section 8</p>
-                    <p className="text-xl font-bold text-green-600">${report.governmentHousing.fairMarketRent.toLocaleString()}/mo</p>
-                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.governmentHousing.fairMarketRent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      Cash Flow: ${calculateCashFlow(report.governmentHousing.fairMarketRent).toLocaleString()}/mo
+                    <p className="text-xl font-bold text-green-600">${report.governmentHousing.fairMarketRent?.toLocaleString() || '0'}/mo</p>
+                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.governmentHousing.fairMarketRent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      Cash Flow: ${calculateCashFlow(report.governmentHousing.fairMarketRent || 0).toLocaleString()}/mo
                     </p>
                   </div>
                 )}
@@ -585,15 +585,15 @@ function PropertyAnalysisContent() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div className="bg-blue-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Section 8 Fair Market Rent</p>
-                  <p className="text-2xl font-bold text-blue-600">${report.governmentHousing.fairMarketRent.toLocaleString()}/mo</p>
+                  <p className="text-2xl font-bold text-blue-600">${report.governmentHousing.fairMarketRent?.toLocaleString() || '0'}/mo</p>
                 </div>
                 <div className="bg-green-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Potential Monthly Income</p>
-                  <p className="text-2xl font-bold text-green-600">${report.governmentHousing.potentialMonthlyIncome.toLocaleString()}/mo</p>
+                  <p className="text-2xl font-bold text-green-600">${report.governmentHousing.potentialMonthlyIncome?.toLocaleString() || '0'}/mo</p>
                 </div>
                 <div className="bg-purple-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Expected Occupancy Rate</p>
-                  <p className="text-2xl font-bold text-purple-600">{report.governmentHousing.occupancyRate}%</p>
+                  <p className="text-2xl font-bold text-purple-600">{report.governmentHousing.occupancyRate || 0}%</p>
                 </div>
               </div>
 
@@ -614,14 +614,14 @@ function PropertyAnalysisContent() {
                       {report.governmentHousing.section8Eligible ? 'Eligible' : 'Not Eligible'}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 mt-3">Voucher Demand: {report.governmentHousing.voucherDemand}</p>
-                  <p className="text-sm text-gray-600 mt-1">Housing Authority: {report.governmentHousing.localHousingAuthority}</p>
+                  <p className="text-sm text-gray-600 mt-3">Voucher Demand: {report.governmentHousing.voucherDemand || 'Unknown'}</p>
+                  <p className="text-sm text-gray-600 mt-1">Housing Authority: {report.governmentHousing.localHousingAuthority || 'Unknown'}</p>
                 </div>
 
                 <div>
                   <h4 className="font-semibold text-gray-900 mb-3">Inspection Requirements</h4>
                   <ul className="space-y-2">
-                    {report.governmentHousing.inspectionRequirements.map((req, i) => (
+                    {(report.governmentHousing.inspectionRequirements || []).map((req, i) => (
                       <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                         <Shield className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                         <span>{req}</span>
@@ -634,7 +634,7 @@ function PropertyAnalysisContent() {
               <div>
                 <h4 className="font-semibold text-gray-900 mb-3">Recommendations</h4>
                 <ul className="space-y-2">
-                  {report.governmentHousing.recommendations.map((rec, i) => (
+                  {(report.governmentHousing.recommendations || []).map((rec, i) => (
                     <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                       <span className="text-indigo-600 mt-1">▸</span>
                       <span>{rec}</span>
