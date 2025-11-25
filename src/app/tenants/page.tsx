@@ -107,6 +107,59 @@ export default function TenantsPage() {
     }
   };
 
+  const handleApproveApplication = async (applicationId: string) => {
+    if (!confirm('Are you sure you want to approve this application and create a tenant profile?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'APPROVED' }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('✅ Application approved! Tenant profile created.');
+        // Refresh applications list
+        await fetchApplications();
+      } else {
+        alert(`Failed to approve application: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('Error approving application:', error);
+      alert('Failed to approve application. Please try again.');
+    }
+  };
+
+  const handleDenyApplication = async (applicationId: string) => {
+    const reason = prompt('Optional: Enter reason for denial');
+    if (reason === null) return; // User clicked cancel
+
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'DENIED' }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Application denied.');
+        // Refresh applications list
+        await fetchApplications();
+      } else {
+        alert(`Failed to deny application: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('Error denying application:', error);
+      alert('Failed to deny application. Please try again.');
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'PENDING': return <Clock className="h-5 w-5 text-gray-500" />;
@@ -455,11 +508,17 @@ export default function TenantsPage() {
 
                     {app.status === 'SUBMITTED' && (
                       <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
-                        <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleApproveApplication(app.id)}
+                          className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                        >
                           <CheckCircle className="h-4 w-4" />
                           Approve & Create Tenant
                         </button>
-                        <button className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleDenyApplication(app.id)}
+                          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+                        >
                           <XCircle className="h-4 w-4" />
                           Deny
                         </button>
