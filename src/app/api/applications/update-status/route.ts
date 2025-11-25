@@ -6,10 +6,7 @@ import { prisma } from '@/lib/prisma';
 /**
  * Update application status (APPROVE or DENY)
  */
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -20,8 +17,7 @@ export async function PATCH(
       );
     }
 
-    const { id: applicationId } = await params;
-    const { status } = await request.json();
+    const { applicationId, status } = await request.json();
 
     // Validate status
     if (!['APPROVED', 'DENIED'].includes(status)) {

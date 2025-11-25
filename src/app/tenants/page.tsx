@@ -113,10 +113,10 @@ export default function TenantsPage() {
     }
 
     try {
-      const response = await fetch(`/api/applications/${applicationId}/status`, {
+      const response = await fetch('/api/applications/update-status', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'APPROVED' }),
+        body: JSON.stringify({ applicationId, status: 'APPROVED' }),
       });
 
       const data = await response.json();
@@ -139,10 +139,10 @@ export default function TenantsPage() {
     if (reason === null) return; // User clicked cancel
 
     try {
-      const response = await fetch(`/api/applications/${applicationId}/status`, {
+      const response = await fetch('/api/applications/update-status', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'DENIED' }),
+        body: JSON.stringify({ applicationId, status: 'DENIED' }),
       });
 
       const data = await response.json();
