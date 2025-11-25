@@ -64,15 +64,21 @@ export interface ShortTermRental {
 
 export interface ExpertAnalysis {
   expertName: string;
-  expertType: 'aggressive' | 'conservative' | 'government_housing';
+  expertType: 'aggressive' | 'conservative' | 'government_housing' | 'short_term_rental';
+  expertise: string;
+  rating: number;
   summary: string;
   recommendedOffer: number;
+  estimatedValue: number; // Same as recommendedOffer for display
   exitStrategy: string;
   estimatedROI: number;
   riskAssessment: string;
-  strengths: string[];
-  concerns: string[];
-  recommendation: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'PASS';
+  pros: string[]; // UI expects 'pros'
+  cons: string[]; // UI expects 'cons'
+  strengths: string[]; // Keep for backwards compat
+  concerns: string[]; // Keep for backwards compat
+  recommendation: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'AVOID' | 'STRONG_AVOID';
+  confidenceLevel: number;
 }
 
 export interface GovernmentHousingAnalysis {
@@ -364,32 +370,47 @@ class PropertyAnalysisService {
         {
           expertName: "Marcus 'The Wolf' Rodriguez",
           expertType: 'aggressive',
+          expertise: 'BRRRR & Forced Appreciation Specialist',
+          rating: 5,
           summary: 'Aggressive BRRRR investor. Targets 25%+ ROI through forced appreciation.',
           recommendedOffer: Math.round(askingPrice * 0.70),
+          estimatedValue: Math.round(askingPrice * 0.70),
           exitStrategy: 'BRRRR or Fix & Flip within 6-12 months',
           estimatedROI: 35,
           riskAssessment: 'High risk, high reward. Aggressive negotiations required.',
           strengths: ['Forced appreciation potential', 'Quick exit possible', 'High leverage opportunity'],
           concerns: ['Requires significant capital', 'Market timing critical'],
+          pros: ['Forced appreciation potential', 'Quick exit possible', 'High leverage opportunity'],
+          cons: ['Requires significant capital', 'Market timing critical'],
           recommendation: 'BUY',
+          confidenceLevel: 85,
         },
         {
           expertName: 'Elizabeth Chen, CPA',
           expertType: 'conservative',
+          expertise: 'Buy & Hold Tax Strategy Expert',
+          rating: 4,
           summary: 'Conservative buy-and-hold CPA. Focuses on cash flow and long-term stability.',
           recommendedOffer: Math.round(askingPrice * 0.90),
+          estimatedValue: Math.round(askingPrice * 0.90),
           exitStrategy: 'Long-term hold (10+ years), traditional rental',
           estimatedROI: 12,
           riskAssessment: 'Low risk. Conservative underwriting with safety margins.',
           strengths: ['Stable cash flow potential', 'Good long-term hold', 'Tax benefits'],
           concerns: ['Thorough inspection needed', 'Property management required'],
+          pros: ['Stable cash flow potential', 'Good long-term hold', 'Tax benefits'],
+          cons: ['Thorough inspection needed', 'Property management required'],
           recommendation: 'HOLD',
+          confidenceLevel: 78,
         },
         {
           expertName: 'David Thompson, HUD Specialist',
           expertType: 'government_housing',
+          expertise: 'Section 8 & Government Housing Programs',
+          rating: 5,
           summary: 'Government housing expert specializing in Section 8 and subsidized programs.',
           recommendedOffer: Math.round(askingPrice * 0.85),
+          estimatedValue: Math.round(askingPrice * 0.85),
           exitStrategy: 'Section 8 long-term rental with guaranteed payments',
           estimatedROI: 18,
           riskAssessment: 'Medium-low risk. Government backing reduces vacancy.',
@@ -399,13 +420,23 @@ class PropertyAnalysisService {
             'Reduced vacancy risk',
           ],
           concerns: ['HQS inspection requirements', 'Tenant screening important'],
+          pros: [
+            `Section 8 rent: $${governmentHousing.estimatedSection8Rent}/mo`,
+            'Guaranteed payments',
+            'Reduced vacancy risk',
+          ],
+          cons: ['HQS inspection requirements', 'Tenant screening important'],
           recommendation: 'STRONG_BUY',
+          confidenceLevel: 92,
         },
         {
           expertName: 'Sarah Martinez, Airbnb Superhost',
           expertType: 'short_term_rental',
+          expertise: 'Airbnb/VRBO Vacation Rental Expert',
+          rating: 5,
           summary: 'Short-term rental expert with 500+ properties managed across vacation markets.',
           recommendedOffer: Math.round(askingPrice * 0.80),
+          estimatedValue: Math.round(askingPrice * 0.80),
           exitStrategy: 'Airbnb/VRBO short-term rental - premium nightly rates',
           estimatedROI: shortTermRental ? Math.round((shortTermRental.estimatedMonthlyRevenue * 12 / askingPrice) * 100) : 28,
           riskAssessment: 'Medium risk. Higher returns but requires active management and guest services.',
@@ -421,13 +452,29 @@ class PropertyAnalysisService {
             'Higher management intensity',
             `Occupancy rate: ${shortTermRental?.occupancyRate || 70}%`,
           ],
+          pros: [
+            `Est. nightly rate: $${shortTermRental?.averageNightlyRate || Math.round(avgRent / 20)}/night`,
+            `Projected monthly: $${shortTermRental?.estimatedMonthlyRevenue.toLocaleString() || Math.round(avgRent * 2.5).toLocaleString()}`,
+            'Premium income potential',
+            'Flexibility for personal use',
+          ],
+          cons: [
+            'Local STR regulations must be verified',
+            'Requires furnishing & professional photos',
+            'Higher management intensity',
+            `Occupancy rate: ${shortTermRental?.occupancyRate || 70}%`,
+          ],
           recommendation: 'BUY',
+          confidenceLevel: 88,
         },
         {
           expertName: 'James Park, STR Portfolio Manager',
           expertType: 'short_term_rental',
+          expertise: 'Corporate STR Portfolio Management',
+          rating: 4,
           summary: 'Corporate STR investor managing $15M+ in short-term rental properties nationwide.',
           recommendedOffer: Math.round(askingPrice * 0.82),
+          estimatedValue: Math.round(askingPrice * 0.82),
           exitStrategy: 'Professional STR operation with dynamic pricing and automation',
           estimatedROI: shortTermRental ? Math.round((shortTermRental.estimatedMonthlyRevenue * 12 / askingPrice) * 100) - 3 : 25,
           riskAssessment: 'Medium risk. Market-dependent but scalable with proper systems.',
@@ -443,7 +490,20 @@ class PropertyAnalysisService {
             'Seasonal demand fluctuations',
             'Competition from hotels and other STRs',
           ],
+          pros: [
+            'Higher gross income vs traditional rental',
+            'Market demand exists in area',
+            'Can pivot to mid-term rental if needed',
+            'Tax advantages through active participation',
+          ],
+          cons: [
+            'Startup costs: $15-25K for furniture/setup',
+            'Platform fees (Airbnb 3%, VRBO 5-8%)',
+            'Seasonal demand fluctuations',
+            'Competition from hotels and other STRs',
+          ],
           recommendation: 'HOLD',
+          confidenceLevel: 75,
         },
       ];
     }
