@@ -109,18 +109,35 @@ export default function PropertySearchPage() {
 
     // Determine property ID - prefix with source if it's an external property
     let propertyId = property.id;
+    let isExternal = false;
+
     if (property.source && property.source !== 'database') {
       // External property - prefix with source name
       propertyId = property.id.toString().startsWith(property.source)
         ? property.id
         : `${property.source}-${property.id}`;
+      isExternal = true;
     } else if (!property.source && typeof property.id === 'number') {
       // Likely a Zillow property without explicit source
       propertyId = `zillow-${property.id}`;
+      isExternal = true;
     }
 
-    // Navigate to property detail page with analysis
-    router.push(`/properties/${propertyId}`);
+    // For external properties, go directly to analyze page
+    if (isExternal) {
+      const queryParams = new URLSearchParams({
+        address: property.address || '',
+        city: property.city || '',
+        state: property.state || '',
+        zipCode: property.zipCode || '',
+        price: (property.currentValue || property.estimatedValue || property.purchasePrice || 0).toString(),
+        type: property.source || 'zillow'
+      });
+      router.push(`/properties/${propertyId}/analyze?${queryParams.toString()}`);
+    } else {
+      // Database properties go to detail page
+      router.push(`/properties/${propertyId}`);
+    }
   };
 
   return (
