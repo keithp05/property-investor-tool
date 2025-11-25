@@ -404,9 +404,9 @@ function PropertyAnalysisContent() {
                 {report.shortTermRental && (
                   <div className="bg-purple-50 rounded-lg p-4 border-2 border-purple-200">
                     <p className="text-sm text-gray-600 mb-1">Short-Term Rental</p>
-                    <p className="text-xl font-bold text-purple-600">${report.shortTermRental.estimatedMonthlyRevenue.toLocaleString()}/mo</p>
-                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      Cash Flow: ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue).toLocaleString()}/mo
+                    <p className="text-xl font-bold text-purple-600">${report.shortTermRental.estimatedMonthlyRevenue?.toLocaleString() || '0'}/mo</p>
+                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      Cash Flow: ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue || 0).toLocaleString()}/mo
                     </p>
                   </div>
                 )}
@@ -516,8 +516,12 @@ function PropertyAnalysisContent() {
                 </div>
                 <div className="bg-green-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Est. Monthly Revenue (Net)</p>
-                  <p className="text-2xl font-bold text-green-600">${report.shortTermRental.estimatedMonthlyRevenue.toLocaleString()}/mo</p>
-                  <p className="text-xs text-green-700 mt-1">+{report.shortTermRental.vsTraditionalRental}% vs traditional</p>
+                  <p className="text-2xl font-bold text-green-600">${report.shortTermRental.estimatedMonthlyRevenue?.toLocaleString() || '0'}/mo</p>
+                  {report.shortTermRental.vsTraditionalRental !== undefined && (
+                    <p className={`text-xs mt-1 font-semibold ${report.shortTermRental.vsTraditionalRental >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {report.shortTermRental.vsTraditionalRental >= 0 ? '+' : ''}{report.shortTermRental.vsTraditionalRental}% vs traditional
+                    </p>
+                  )}
                 </div>
                 <div className="bg-blue-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Expected Occupancy</p>
@@ -532,7 +536,7 @@ function PropertyAnalysisContent() {
                     <p className="text-sm text-gray-700"><span className="font-semibold">Platform:</span> {report.shortTermRental.platform}</p>
                     <p className="text-sm text-gray-700"><span className="font-semibold">Seasonal Demand:</span> {report.shortTermRental.seasonalDemand}</p>
                     <p className="text-sm text-gray-700"><span className="font-semibold">Competition:</span> {report.shortTermRental.competitionLevel}</p>
-                    <p className="text-sm text-gray-700"><span className="font-semibold">Annual Revenue:</span> ${report.shortTermRental.projectedAnnualRevenue.toLocaleString()}</p>
+                    <p className="text-sm text-gray-700"><span className="font-semibold">Annual Revenue:</span> ${report.shortTermRental.projectedAnnualRevenue?.toLocaleString() || '0'}</p>
                   </div>
                 </div>
 
