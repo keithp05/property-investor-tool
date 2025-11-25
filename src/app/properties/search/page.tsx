@@ -106,8 +106,21 @@ export default function PropertySearchPage() {
   const analyzeProperty = (property: any) => {
     // Save property data to localStorage for the analysis page
     localStorage.setItem(`property-${property.id}`, JSON.stringify(property));
+
+    // Determine property ID - prefix with source if it's an external property
+    let propertyId = property.id;
+    if (property.source && property.source !== 'database') {
+      // External property - prefix with source name
+      propertyId = property.id.toString().startsWith(property.source)
+        ? property.id
+        : `${property.source}-${property.id}`;
+    } else if (!property.source && typeof property.id === 'number') {
+      // Likely a Zillow property without explicit source
+      propertyId = `zillow-${property.id}`;
+    }
+
     // Navigate to property detail page with analysis
-    router.push(`/properties/${property.id}`);
+    router.push(`/properties/${propertyId}`);
   };
 
   return (
