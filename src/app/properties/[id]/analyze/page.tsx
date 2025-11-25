@@ -2,7 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
-import { ArrowLeft, MapPin, Home, TrendingUp, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building } from 'lucide-react';
+import { ArrowLeft, MapPin, Home, TrendingUp, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building, Camera, X, Upload } from 'lucide-react';
 
 interface ExpertAnalysis {
   expertName: string;
@@ -70,10 +70,30 @@ function PropertyAnalysisContent() {
   const [downPaymentPercent, setDownPaymentPercent] = useState(20);
   const [interestRate, setInterestRate] = useState(7.5);
   const [loanTermYears, setLoanTermYears] = useState(30);
-  const [monthlyRepairs, setMonthlyRepairs] = useState(200);
+  const [repairAmount, setRepairAmount] = useState(200);
+  const [repairPeriod, setRepairPeriod] = useState<'monthly' | 'annual' | 'project'>('monthly');
+  const [enableRepairFund, setEnableRepairFund] = useState(false);
+  const [repairFundPercent, setRepairFundPercent] = useState(5);
   const [propertyTax, setPropertyTax] = useState(0);
   const [insurance, setInsurance] = useState(150);
   const [hoa, setHoa] = useState(0);
+
+  // Remodel cost tracking
+  const [remodelCosts, setRemodelCosts] = useState({
+    kitchen: 0,
+    bathrooms: 0,
+    flooring: 0,
+    paint: 0,
+    roofing: 0,
+    hvac: 0,
+    electrical: 0,
+    plumbing: 0,
+    windows: 0,
+    landscaping: 0,
+    other: 0,
+  });
+  const [propertyPhotos, setPropertyPhotos] = useState<string[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
   // Extract property details from URL
   const address = searchParams.get('address') || 'Unknown Address';
@@ -112,23 +132,92 @@ function PropertyAnalysisContent() {
     return Math.round(monthlyPayment);
   };
 
+  // Calculate monthly repair cost based on period
+  const getMonthlyRepairs = () => {
+    if (repairPeriod === 'monthly') {
+      return repairAmount;
+    } else if (repairPeriod === 'annual') {
+      return Math.round(repairAmount / 12);
+    } else {
+      // Project - don't include in monthly cash flow
+      return 0;
+    }
+  };
+
+  // Calculate repair fund reserve
+  const getRepairFundReserve = (monthlyIncome: number) => {
+    if (!enableRepairFund) return 0;
+    return Math.round(monthlyIncome * (repairFundPercent / 100));
+  };
+
   // Calculate total monthly expenses
-  const calculateMonthlyExpenses = () => {
+  const calculateMonthlyExpenses = (monthlyIncome: number = 0) => {
     const mortgage = calculateMortgage();
+    const monthlyRepairs = getMonthlyRepairs();
+    const repairFund = getRepairFundReserve(monthlyIncome);
+
     return {
       mortgage,
       propertyTax,
       insurance,
       repairs: monthlyRepairs,
+      repairFund,
       hoa,
-      total: mortgage + propertyTax + insurance + monthlyRepairs + hoa
+      total: mortgage + propertyTax + insurance + monthlyRepairs + repairFund + hoa
     };
   };
 
   // Calculate cash flow for different rental strategies
   const calculateCashFlow = (monthlyIncome: number) => {
-    const expenses = calculateMonthlyExpenses();
+    const expenses = calculateMonthlyExpenses(monthlyIncome);
     return monthlyIncome - expenses.total;
+  };
+
+  // Calculate total remodel costs
+  const getTotalRemodelCost = () => {
+    return Object.values(remodelCosts).reduce((sum, cost) => sum + cost, 0);
+  };
+
+  // Update remodel cost category
+  const updateRemodelCost = (category: keyof typeof remodelCosts, value: number) => {
+    setRemodelCosts(prev => ({ ...prev, [category]: value }));
+  };
+
+  // Handle photo upload
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingPhotos(true);
+    try {
+      const newPhotos: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const reader = new FileReader();
+
+        await new Promise((resolve) => {
+          reader.onload = (event) => {
+            if (event.target?.result) {
+              newPhotos.push(event.target.result as string);
+            }
+            resolve(null);
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      setPropertyPhotos(prev => [...prev, ...newPhotos]);
+    } catch (error) {
+      console.error('Error uploading photos:', error);
+    } finally {
+      setUploadingPhotos(false);
+    }
+  };
+
+  // Remove photo
+  const removePhoto = (index: number) => {
+    setPropertyPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
   async function loadPropertyAnalysis() {
@@ -311,16 +400,262 @@ function PropertyAnalysisContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Monthly Repairs</label>
-                <input
-                  type="number"
-                  value={monthlyRepairs}
-                  onChange={(e) => setMonthlyRepairs(Number(e.target.value))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
+            {/* Remodel Cost Tracking Section */}
+            <div className="border-t pt-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">One-Time Remodel Costs</h3>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Total Remodel Cost</p>
+                  <p className="text-2xl font-bold text-indigo-600">${getTotalRemodelCost().toLocaleString()}</p>
+                </div>
               </div>
+
+              {/* Photo Upload */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Property Condition Photos</label>
+                <div className="flex items-center gap-4 mb-4">
+                  <label className="cursor-pointer bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2">
+                    {uploadingPhotos ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-5 h-5" />
+                        Upload Photos
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                      disabled={uploadingPhotos}
+                    />
+                  </label>
+                  <p className="text-sm text-gray-500">{propertyPhotos.length} photo{propertyPhotos.length !== 1 ? 's' : ''} uploaded</p>
+                </div>
+
+                {/* Photo Grid */}
+                {propertyPhotos.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {propertyPhotos.map((photo, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={photo}
+                          alt={`Property ${index + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border-2 border-gray-200"
+                        />
+                        <button
+                          onClick={() => removePhoto(index)}
+                          className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Remodel Cost Categories */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Kitchen</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.kitchen}
+                    onChange={(e) => updateRemodelCost('kitchen', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Bathrooms</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.bathrooms}
+                    onChange={(e) => updateRemodelCost('bathrooms', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Flooring</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.flooring}
+                    onChange={(e) => updateRemodelCost('flooring', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Paint</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.paint}
+                    onChange={(e) => updateRemodelCost('paint', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Roofing</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.roofing}
+                    onChange={(e) => updateRemodelCost('roofing', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">HVAC</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.hvac}
+                    onChange={(e) => updateRemodelCost('hvac', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Electrical</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.electrical}
+                    onChange={(e) => updateRemodelCost('electrical', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Plumbing</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.plumbing}
+                    onChange={(e) => updateRemodelCost('plumbing', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Windows</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.windows}
+                    onChange={(e) => updateRemodelCost('windows', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Landscaping</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.landscaping}
+                    onChange={(e) => updateRemodelCost('landscaping', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Other</label>
+                  <input
+                    type="number"
+                    value={remodelCosts.other}
+                    onChange={(e) => updateRemodelCost('other', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="$0"
+                  />
+                </div>
+              </div>
+
+              {getTotalRemodelCost() > 0 && (
+                <div className="bg-indigo-50 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Total Investment</p>
+                      <p className="text-lg text-gray-600">${(Number(price) + getTotalRemodelCost()).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Purchase Price</p>
+                      <p className="text-lg text-gray-600">${Number(price).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Remodel Costs</p>
+                      <p className="text-lg font-bold text-indigo-600">${getTotalRemodelCost().toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Monthly Repair & Expense Section */}
+            <div className="border-t pt-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Repairs & Reserves</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Repair Amount</label>
+                  <input
+                    type="number"
+                    value={repairAmount}
+                    onChange={(e) => setRepairAmount(Number(e.target.value))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Repair Period</label>
+                  <select
+                    value={repairPeriod}
+                    onChange={(e) => setRepairPeriod(e.target.value as 'monthly' | 'annual' | 'project')}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="monthly">Monthly</option>
+                    <option value="annual">Annual</option>
+                    <option value="project">One-Time Project</option>
+                  </select>
+                  {repairPeriod === 'annual' && (
+                    <p className="text-xs text-gray-500 mt-1">${Math.round(repairAmount / 12)}/mo average</p>
+                  )}
+                  {repairPeriod === 'project' && (
+                    <p className="text-xs text-gray-500 mt-1">Not included in monthly cash flow</p>
+                  )}
+                </div>
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enableRepairFund}
+                      onChange={(e) => setEnableRepairFund(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-semibold text-gray-700">Enable Repair Fund Reserve</span>
+                  </label>
+                </div>
+              </div>
+              {enableRepairFund && (
+                <div className="bg-blue-50 rounded-lg p-4 mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Repair Fund Reserve (%  of monthly rent)</label>
+                  <input
+                    type="number"
+                    value={repairFundPercent}
+                    onChange={(e) => setRepairFundPercent(Number(e.target.value))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    min="0"
+                    max="20"
+                  />
+                  <p className="text-xs text-gray-600 mt-2">
+                    Recommended: 5-10% for long-term reserves (roof, HVAC, etc.)
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Property Tax/mo</label>
                 <input
@@ -353,7 +688,7 @@ function PropertyAnalysisContent() {
             {/* Monthly Expenses Breakdown */}
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <h3 className="font-semibold text-gray-900 mb-3">Monthly Expenses Breakdown</h3>
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+              <div className={`grid grid-cols-2 ${enableRepairFund ? 'md:grid-cols-7' : 'md:grid-cols-6'} gap-4`}>
                 <div>
                   <p className="text-xs text-gray-600">Mortgage (P&I)</p>
                   <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses().mortgage.toLocaleString()}</p>
@@ -367,9 +702,19 @@ function PropertyAnalysisContent() {
                   <p className="text-lg font-bold text-gray-900">${insurance.toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-600">Repairs</p>
-                  <p className="text-lg font-bold text-gray-900">${monthlyRepairs.toLocaleString()}</p>
+                  <p className="text-xs text-gray-600">Repairs {repairPeriod === 'annual' && '(avg)'}</p>
+                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses().repairs.toLocaleString()}</p>
+                  {repairPeriod === 'project' && (
+                    <p className="text-xs text-gray-500 mt-1">Project: ${repairAmount.toLocaleString()}</p>
+                  )}
                 </div>
+                {enableRepairFund && (
+                  <div>
+                    <p className="text-xs text-gray-600">Repair Fund</p>
+                    <p className="text-lg font-bold text-blue-600">${calculateMonthlyExpenses().repairFund.toLocaleString()}</p>
+                    <p className="text-xs text-gray-500 mt-1">{repairFundPercent}% reserve</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-gray-600">HOA</p>
                   <p className="text-lg font-bold text-gray-900">${hoa.toLocaleString()}</p>
