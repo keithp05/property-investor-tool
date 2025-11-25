@@ -249,11 +249,11 @@ function PropertyAnalysisContent() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-sm text-gray-600 mb-1">Estimated Value</p>
-                <p className="text-2xl font-bold text-gray-900">${report.estimatedValue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-gray-900">${report.estimatedValue?.toLocaleString() || '0'}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-sm text-gray-600 mb-1">Est. Monthly Rent</p>
-                <p className="text-2xl font-bold text-gray-900">${report.estimatedRent.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-gray-900">${report.estimatedRent?.toLocaleString() || '0'}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-sm text-gray-600 mb-1">Price/Sq Ft</p>
@@ -387,9 +387,9 @@ function PropertyAnalysisContent() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-blue-50 rounded-lg p-4 border-2 border-blue-200">
                   <p className="text-sm text-gray-600 mb-1">Traditional Rental</p>
-                  <p className="text-xl font-bold text-blue-600">${report.estimatedRent.toLocaleString()}/mo</p>
-                  <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.estimatedRent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    Cash Flow: ${calculateCashFlow(report.estimatedRent).toLocaleString()}/mo
+                  <p className="text-xl font-bold text-blue-600">${report.estimatedRent?.toLocaleString() || '0'}/mo</p>
+                  <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.estimatedRent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    Cash Flow: ${calculateCashFlow(report.estimatedRent || 0).toLocaleString()}/mo
                   </p>
                 </div>
                 {report.governmentHousing && (
@@ -457,7 +457,7 @@ function PropertyAnalysisContent() {
                     {/* Estimated Value */}
                     <div className="mb-4 pb-4 border-b border-gray-200">
                       <p className="text-sm text-gray-600 mb-1">Estimated Value</p>
-                      <p className="text-2xl font-bold text-gray-900">${expert.estimatedValue.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-gray-900">${expert.estimatedValue?.toLocaleString() || '0'}</p>
                     </div>
 
                     {/* Summary */}
@@ -470,7 +470,7 @@ function PropertyAnalysisContent() {
                         Strengths
                       </h4>
                       <ul className="space-y-1">
-                        {expert.pros.map((pro, i) => (
+                        {(expert.pros || []).map((pro, i) => (
                           <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                             <span className="text-green-600 mt-1">•</span>
                             <span>{pro}</span>
@@ -486,7 +486,7 @@ function PropertyAnalysisContent() {
                         Concerns
                       </h4>
                       <ul className="space-y-1">
-                        {expert.cons.map((con, i) => (
+                        {(expert.cons || []).map((con, i) => (
                           <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                             <span className="text-orange-600 mt-1">•</span>
                             <span>{con}</span>
@@ -671,7 +671,7 @@ function PropertyAnalysisContent() {
                   Key Strengths
                 </h3>
                 <ul className="space-y-2">
-                  {report.aiAnalysis.strengths.map((strength, i) => (
+                  {(report.aiAnalysis.strengths || []).map((strength, i) => (
                     <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                       <span className="text-green-600 mt-1">✓</span>
                       <span>{strength}</span>
@@ -686,7 +686,7 @@ function PropertyAnalysisContent() {
                   Key Concerns
                 </h3>
                 <ul className="space-y-2">
-                  {report.aiAnalysis.concerns.map((concern, i) => (
+                  {(report.aiAnalysis.concerns || []).map((concern, i) => (
                     <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                       <span className="text-orange-600 mt-1">⚠</span>
                       <span>{concern}</span>
