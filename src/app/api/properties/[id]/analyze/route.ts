@@ -45,7 +45,7 @@ export async function GET(
 
     let property: any;
 
-    if (propertyType === 'tax-auction') {
+    if (propertyType === 'tax-auction' || propertyType === 'zillow') {
       // Build property object from URL parameters
       property = {
         id: propertyId,
@@ -59,7 +59,7 @@ export async function GET(
         squareFeet: parseInt(searchParams.get('squareFeet') || '1500'),
         yearBuilt: parseInt(searchParams.get('yearBuilt') || '2000'),
       };
-      console.log('📊 Analyzing tax auction property:', property.address);
+      console.log(`📊 Analyzing ${propertyType} property:`, property.address);
     } else {
       // For demo purposes, get property from demo data service
       // In production, this would fetch from database
