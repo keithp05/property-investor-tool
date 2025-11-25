@@ -1,7 +1,9 @@
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 
 // Initialize SNS client lazily to avoid issues with missing credentials
 let snsClient: SNSClient | null = null;
+let sesClient: SESClient | null = null;
 
 const getSNSClient = () => {
   if (!snsClient) {
@@ -22,6 +24,27 @@ const getSNSClient = () => {
     });
   }
   return snsClient;
+};
+
+const getSESClient = () => {
+  if (!sesClient) {
+    const accessKeyId = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+
+    if (!accessKeyId || !secretAccessKey) {
+      console.error('❌ AWS SES credentials not configured');
+      return null;
+    }
+
+    sesClient = new SESClient({
+      region: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+  }
+  return sesClient;
 };
 
 interface SendSMSParams {
@@ -94,43 +117,56 @@ export async function sendSMS({ phoneNumber, message }: SendSMSParams): Promise<
  */
 export async function sendEmail({ to, subject, body, html }: SendEmailParams): Promise<boolean> {
   try {
-    console.log('📧 Sending email to:', to);
+    console.log('📧 Sending email via AWS SES to:', to);
 
-    // Check if Resend API key is configured
-    if (!process.env.RESEND_API_KEY) {
-      console.error('❌ RESEND_API_KEY not configured');
+    // Get SES client with credential validation
+    const client = getSESClient();
+    if (!client) {
+      console.error('❌ AWS SES not configured - cannot send email');
+      console.error('Please set SNS_ACCESS_KEY_ID and SNS_SECRET_ACCESS_KEY in environment variables');
       return false;
     }
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+    const fromAddress = process.env.EMAIL_FROM || 'keith.p05@gmail.com';
+    console.log('📤 From address:', fromAddress);
+
+    const command = new SendEmailCommand({
+      Source: fromAddress,
+      Destination: {
+        ToAddresses: [to],
       },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
-        to: [to],
-        subject: subject,
-        text: body,
-        html: html || body,
-      }),
+      Message: {
+        Subject: {
+          Data: subject,
+          Charset: 'UTF-8',
+        },
+        Body: {
+          Text: {
+            Data: body,
+            Charset: 'UTF-8',
+          },
+          Html: {
+            Data: html || body,
+            Charset: 'UTF-8',
+          },
+        },
+      },
     });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-      console.error('❌ Failed to send email:', error);
-      console.error('Response status:', response.status, response.statusText);
-      console.error('Attempted to send to:', to);
-      console.error('From address:', process.env.EMAIL_FROM || 'onboarding@resend.dev');
-      return false;
-    }
-
-    const result = await response.json();
-    console.log('✅ Email sent successfully:', result.id);
+    const result = await client.send(command);
+    console.log('✅ Email sent successfully via AWS SES. MessageId:', result.MessageId);
     return true;
   } catch (error: any) {
-    console.error('❌ Failed to send email:', error.message || error);
+    console.error('❌ Failed to send email via AWS SES:', error.message || error);
+    console.error('Error details:', error);
+
+    if (error.name === 'MessageRejected') {
+      console.error('Email was rejected. Make sure the FROM and TO addresses are verified in AWS SES.');
+    }
+    if (error.name === 'InvalidClientTokenId' || error.name === 'SignatureDoesNotMatch') {
+      console.error('AWS credentials are invalid');
+    }
+
     return false;
   }
 }
