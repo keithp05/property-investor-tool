@@ -113,6 +113,11 @@ function PropertyAnalysisContent() {
     soldDate: '',
   });
 
+  // Document upload state
+  const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([]);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [documentUploadStatus, setDocumentUploadStatus] = useState('');
+
   // Extract property details from URL
   const address = searchParams.get('address') || 'Unknown Address';
   const city = searchParams.get('city') || 'Unknown';
@@ -277,6 +282,88 @@ function PropertyAnalysisContent() {
   // Remove manual comp
   const removeManualComp = (id: string) => {
     setManualComps(prev => prev.filter(comp => comp.id !== id));
+  };
+
+  // Handle document upload
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>, documentType: 'comps' | 'estimate' | 'inspection' | 'repair_photo') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDocument(true);
+    setDocumentUploadStatus(`Uploading ${documentType}...`);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', documentType);
+      formData.append('propertyId', params.id as string);
+
+      const response = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setDocumentUploadStatus(`Successfully processed ${documentType}`);
+        setUploadedDocuments(prev => [...prev, result.document]);
+
+        // Auto-populate data based on document type
+        if (documentType === 'comps' && result.extractedData.comps) {
+          // Add extracted comps to manual comps list
+          const extractedComps = result.extractedData.comps.map((comp: any) => ({
+            id: Date.now().toString() + Math.random(),
+            address: comp.address,
+            price: comp.price || comp.rentPrice || 0,
+            bedrooms: comp.bedrooms || 0,
+            bathrooms: comp.bathrooms || 0,
+            sqft: comp.sqft || 0,
+            soldDate: comp.soldDate || new Date().toISOString().split('T')[0],
+            source: 'document',
+          }));
+          setManualComps(prev => [...prev, ...extractedComps]);
+          setDocumentUploadStatus(`Added ${extractedComps.length} comps from document`);
+        } else if (documentType === 'estimate' && result.extractedData.lineItems) {
+          // Auto-populate remodel costs from estimate
+          const newRemodelCosts = { ...remodelCosts };
+          result.extractedData.lineItems.forEach((item: any) => {
+            const category = item.category as keyof typeof remodelCosts;
+            if (category in newRemodelCosts) {
+              newRemodelCosts[category] += item.cost || 0;
+            }
+          });
+          setRemodelCosts(newRemodelCosts);
+          setDocumentUploadStatus(`Updated remodel costs from estimate`);
+        } else if (documentType === 'repair_photo' && result.extractedData.estimatedCost) {
+          // Show repair cost estimate
+          const avgCost = result.extractedData.estimatedCost.average || 0;
+          const category = result.extractedData.issueType as keyof typeof remodelCosts;
+          if (category in remodelCosts) {
+            const current = remodelCosts[category];
+            if (confirm(`Add $${avgCost} to ${category} repairs? Current: $${current}`)) {
+              updateRemodelCost(category, current + avgCost);
+            }
+          }
+        }
+
+        setTimeout(() => setDocumentUploadStatus(''), 3000);
+      } else {
+        setDocumentUploadStatus(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Document upload error:', error);
+      setDocumentUploadStatus('Upload failed');
+    } finally {
+      setUploadingDocument(false);
+      // Reset file input
+      e.target.value = '';
+    }
+  };
+
+  // Remove uploaded document
+  const removeDocument = (id: string) => {
+    setUploadedDocuments(prev => prev.filter(doc => doc.id !== id));
   };
 
   async function loadPropertyAnalysis() {
@@ -584,6 +671,140 @@ function PropertyAnalysisContent() {
                 <div className="text-center py-8 text-gray-500">
                   <Home className="h-12 w-12 text-gray-300 mx-auto mb-2" />
                   <p>No comps added yet. Add your own comparable sales data.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Document Upload Section */}
+            <div className="border-t pt-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Upload className="h-5 w-5 text-indigo-600" />
+                Upload Documents & Photos
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                {/* Upload Comps Document */}
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-4 hover:shadow-md transition">
+                  <label className="cursor-pointer block">
+                    <div className="flex flex-col items-center text-center">
+                      <Home className="h-8 w-8 text-blue-600 mb-2" />
+                      <p className="font-semibold text-gray-900 mb-1">Comp Packet</p>
+                      <p className="text-xs text-gray-600 mb-3">PDF with comparable sales</p>
+                      <div className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+                        Choose File
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => handleDocumentUpload(e, 'comps')}
+                      className="hidden"
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+                </div>
+
+                {/* Upload Estimate */}
+                <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-lg p-4 hover:shadow-md transition">
+                  <label className="cursor-pointer block">
+                    <div className="flex flex-col items-center text-center">
+                      <DollarSign className="h-8 w-8 text-green-600 mb-2" />
+                      <p className="font-semibold text-gray-900 mb-1">Contractor Estimate</p>
+                      <p className="text-xs text-gray-600 mb-3">Repair/remodel quote</p>
+                      <div className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm font-medium">
+                        Choose File
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => handleDocumentUpload(e, 'estimate')}
+                      className="hidden"
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+                </div>
+
+                {/* Upload Inspection */}
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-lg p-4 hover:shadow-md transition">
+                  <label className="cursor-pointer block">
+                    <div className="flex flex-col items-center text-center">
+                      <Shield className="h-8 w-8 text-purple-600 mb-2" />
+                      <p className="font-semibold text-gray-900 mb-1">Inspection Report</p>
+                      <p className="text-xs text-gray-600 mb-3">Property inspection</p>
+                      <div className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium">
+                        Choose File
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => handleDocumentUpload(e, 'inspection')}
+                      className="hidden"
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+                </div>
+
+                {/* Upload Repair Photos */}
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-lg p-4 hover:shadow-md transition">
+                  <label className="cursor-pointer block">
+                    <div className="flex flex-col items-center text-center">
+                      <Camera className="h-8 w-8 text-orange-600 mb-2" />
+                      <p className="font-semibold text-gray-900 mb-1">Repair Photos</p>
+                      <p className="text-xs text-gray-600 mb-3">Photo of damage/repairs</p>
+                      <div className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm font-medium">
+                        Choose File
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png"
+                      onChange={(e) => handleDocumentUpload(e, 'repair_photo')}
+                      className="hidden"
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Upload Status */}
+              {uploadingDocument && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                  <p className="text-blue-900 font-medium">{documentUploadStatus}</p>
+                </div>
+              )}
+
+              {documentUploadStatus && !uploadingDocument && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <p className="text-green-900 font-medium">{documentUploadStatus}</p>
+                </div>
+              )}
+
+              {/* Uploaded Documents List */}
+              {uploadedDocuments.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-gray-900 mb-2">Uploaded Documents</h4>
+                  {uploadedDocuments.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{doc.fileName}</p>
+                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                          <span className="capitalize">{doc.documentType.replace('_', ' ')}</span>
+                          <span className="text-gray-400">{new Date(doc.uploadedAt).toLocaleDateString()}</span>
+                          <span className="text-gray-400">{(doc.fileSize / 1024).toFixed(1)} KB</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeDocument(doc.id)}
+                        className="ml-4 text-red-500 hover:text-red-700"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
