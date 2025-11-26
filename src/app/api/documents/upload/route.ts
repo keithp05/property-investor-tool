@@ -6,8 +6,8 @@ export const maxDuration = 60;
 
 /**
  * Document Upload and AI Analysis API
- * Handles: PDFs and images (comp packets, estimates, inspection reports, repair photos)
- * Uses OpenAI Vision for images, text extraction + GPT-4 for PDFs
+ * Handles: Images (comp packets, estimates, inspection reports, repair photos)
+ * Uses OpenAI Vision for image analysis
  */
 export async function POST(request: NextRequest) {
   try {
@@ -50,86 +50,60 @@ export async function POST(request: NextRequest) {
     console.log(`Processing ${documentType} document: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
 
     const mimeType = file.type;
-    const isImage = mimeType.startsWith('image/');
+    
+    // Check for supported image types
+    const supportedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+    const isImage = supportedTypes.includes(mimeType);
     const isPDF = mimeType === 'application/pdf';
 
-    if (!isImage && !isPDF) {
+    if (isPDF) {
       return NextResponse.json(
-        { success: false, error: `Unsupported file type: ${mimeType}. Please upload an image (PNG, JPG) or PDF.` },
+        { 
+          success: false, 
+          error: 'PDF files are not currently supported. Please take a screenshot or photo of your document and upload as an image (PNG, JPG, or WEBP).' 
+        },
         { status: 400 }
       );
     }
 
-    // Convert file to buffer
+    if (!isImage) {
+      return NextResponse.json(
+        { success: false, error: `Unsupported file type: ${mimeType}. Please upload an image (PNG, JPG, GIF, or WEBP).` },
+        { status: 400 }
+      );
+    }
+
+    // Convert file to buffer and base64
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    const base64 = buffer.toString('base64');
 
-    let extractedData;
+    const extractionPrompt = getExtractionPrompt(documentType);
 
-    if (isImage) {
-      // Use OpenAI Vision for images
-      const base64 = buffer.toString('base64');
-      const extractionPrompt = getExtractionPrompt(documentType);
+    console.log('Analyzing image with OpenAI Vision...');
 
-      console.log('Analyzing image with OpenAI Vision...');
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: extractionPrompt },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${mimeType};base64,${base64}`,
-                  detail: 'high',
-                },
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: extractionPrompt },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${mimeType};base64,${base64}`,
+                detail: 'high',
               },
-            ],
-          },
-        ],
-        max_tokens: 4096,
-        response_format: { type: 'json_object' },
-      });
+            },
+          ],
+        },
+      ],
+      max_tokens: 4096,
+      response_format: { type: 'json_object' },
+    });
 
-      extractedData = JSON.parse(response.choices[0].message.content || '{}');
-    } else if (isPDF) {
-      // Extract text from PDF and use GPT-4
-      console.log('Extracting text from PDF...');
-      
-      // Dynamic import for pdf-parse
-      const pdfParse = (await import('pdf-parse')).default;
-      const pdfData = await pdfParse(buffer);
-      const pdfText = pdfData.text;
-
-      if (!pdfText || pdfText.trim().length === 0) {
-        return NextResponse.json(
-          { success: false, error: 'Could not extract text from PDF. The PDF may be image-based. Please upload images instead.' },
-          { status: 400 }
-        );
-      }
-
-      console.log(`Extracted ${pdfText.length} characters from PDF`);
-      console.log('Analyzing PDF content with GPT-4...');
-
-      const extractionPrompt = getExtractionPrompt(documentType);
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: `${extractionPrompt}\n\nDocument content:\n${pdfText.substring(0, 30000)}`, // Limit text length
-          },
-        ],
-        max_tokens: 4096,
-        response_format: { type: 'json_object' },
-      });
-
-      extractedData = JSON.parse(response.choices[0].message.content || '{}');
-    }
+    const extractedData = JSON.parse(response.choices[0].message.content || '{}');
 
     console.log('Document analyzed successfully');
 
@@ -170,7 +144,7 @@ export async function POST(request: NextRequest) {
 
     if (error.message?.includes('MIME')) {
       return NextResponse.json(
-        { success: false, error: 'Invalid file type. Please upload an image (PNG, JPG, WEBP) or a text-based PDF.' },
+        { success: false, error: 'Invalid file type. Please upload an image (PNG, JPG, GIF, or WEBP).' },
         { status: 400 }
       );
     }
