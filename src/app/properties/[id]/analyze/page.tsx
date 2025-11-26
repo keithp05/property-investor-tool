@@ -284,79 +284,86 @@ function PropertyAnalysisContent() {
     setManualComps(prev => prev.filter(comp => comp.id !== id));
   };
 
-  // Handle document upload
+  // Handle document upload (supports multiple files for repair photos)
   const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>, documentType: 'comps' | 'estimate' | 'inspection' | 'repair_photo') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingDocument(true);
-    setDocumentUploadStatus(`Uploading ${documentType}...`);
+    const totalFiles = files.length;
+    let processedCount = 0;
+    let successCount = 0;
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', documentType);
-      formData.append('propertyId', params.id as string);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        processedCount++;
+        setDocumentUploadStatus(`Processing ${processedCount}/${totalFiles}: ${file.name}...`);
 
-      const response = await fetch('/api/documents/upload', {
-        method: 'POST',
-        body: formData,
-      });
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', documentType);
+        formData.append('propertyId', params.id as string);
 
-      const result = await response.json();
+        const response = await fetch('/api/documents/upload', {
+          method: 'POST',
+          body: formData,
+        });
 
-      if (result.success) {
-        setDocumentUploadStatus(`Successfully processed ${documentType}`);
-        setUploadedDocuments(prev => [...prev, result.document]);
+        const result = await response.json();
 
-        // Auto-populate data based on document type
-        if (documentType === 'comps' && result.extractedData.comps) {
-          // Add extracted comps to manual comps list
-          const extractedComps = result.extractedData.comps.map((comp: any) => ({
-            id: Date.now().toString() + Math.random(),
-            address: comp.address,
-            price: comp.price || comp.rentPrice || 0,
-            bedrooms: comp.bedrooms || 0,
-            bathrooms: comp.bathrooms || 0,
-            sqft: comp.sqft || 0,
-            soldDate: comp.soldDate || new Date().toISOString().split('T')[0],
-            source: 'document',
-          }));
-          setManualComps(prev => [...prev, ...extractedComps]);
-          setDocumentUploadStatus(`Added ${extractedComps.length} comps from document`);
-        } else if (documentType === 'estimate' && result.extractedData.lineItems) {
-          // Auto-populate remodel costs from estimate
-          const newRemodelCosts = { ...remodelCosts };
-          result.extractedData.lineItems.forEach((item: any) => {
-            const category = item.category as keyof typeof remodelCosts;
-            if (category in newRemodelCosts) {
-              newRemodelCosts[category] += item.cost || 0;
-            }
-          });
-          setRemodelCosts(newRemodelCosts);
-          setDocumentUploadStatus(`Updated remodel costs from estimate`);
-        } else if (documentType === 'repair_photo' && result.extractedData.estimatedCost) {
-          // Show repair cost estimate
-          const avgCost = result.extractedData.estimatedCost.average || 0;
-          const category = result.extractedData.issueType as keyof typeof remodelCosts;
-          if (category in remodelCosts) {
-            const current = remodelCosts[category];
-            if (confirm(`Add $${avgCost} to ${category} repairs? Current: $${current}`)) {
-              updateRemodelCost(category, current + avgCost);
+        if (result.success) {
+          successCount++;
+          setUploadedDocuments(prev => [...prev, result.document]);
+
+          // Auto-populate data based on document type
+          if (documentType === 'comps' && result.extractedData.comps) {
+            const extractedComps = result.extractedData.comps.map((comp: any) => ({
+              id: Date.now().toString() + Math.random(),
+              address: comp.address,
+              price: comp.price || comp.rentPrice || 0,
+              bedrooms: comp.bedrooms || 0,
+              bathrooms: comp.bathrooms || 0,
+              sqft: comp.sqft || 0,
+              soldDate: comp.soldDate || new Date().toISOString().split('T')[0],
+              source: 'document',
+            }));
+            setManualComps(prev => [...prev, ...extractedComps]);
+          } else if (documentType === 'estimate' && result.extractedData.lineItems) {
+            const newRemodelCosts = { ...remodelCosts };
+            result.extractedData.lineItems.forEach((item: any) => {
+              const category = item.category as keyof typeof remodelCosts;
+              if (category in newRemodelCosts) {
+                newRemodelCosts[category] += item.cost || 0;
+              }
+            });
+            setRemodelCosts(newRemodelCosts);
+          } else if (documentType === 'repair_photo' && result.extractedData.estimatedCost) {
+            const avgCost = result.extractedData.estimatedCost.average || 0;
+            const category = result.extractedData.issueType as keyof typeof remodelCosts;
+            if (category in remodelCosts) {
+              // Auto-add costs for batch uploads
+              setRemodelCosts(prev => ({
+                ...prev,
+                [category]: prev[category] + avgCost
+              }));
             }
           }
         }
-
-        setTimeout(() => setDocumentUploadStatus(''), 3000);
-      } else {
-        setDocumentUploadStatus(`Error: ${result.error}`);
       }
+
+      if (successCount === totalFiles) {
+        setDocumentUploadStatus(`Successfully processed ${successCount} file${successCount > 1 ? 's' : ''}`);
+      } else {
+        setDocumentUploadStatus(`Processed ${successCount}/${totalFiles} files successfully`);
+      }
+      setTimeout(() => setDocumentUploadStatus(''), 5000);
+
     } catch (error) {
       console.error('Document upload error:', error);
       setDocumentUploadStatus('Upload failed');
     } finally {
       setUploadingDocument(false);
-      // Reset file input
       e.target.value = '';
     }
   };
@@ -752,13 +759,14 @@ function PropertyAnalysisContent() {
                     <div className="flex flex-col items-center text-center">
                       <Camera className="h-8 w-8 text-orange-600 mb-2" />
                       <p className="font-semibold text-gray-900 mb-1">Repair Photos</p>
-                      <p className="text-xs text-gray-600 mb-3">Photo of damage/repairs</p>
+                      <p className="text-xs text-gray-600 mb-3">Photos of damage/repairs</p>
                       <div className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm font-medium">
-                        Choose File
+                        Choose Files
                       </div>
                     </div>
                     <input
                       type="file"
+                      multiple
                       accept=".jpg,.jpeg,.png"
                       onChange={(e) => handleDocumentUpload(e, 'repair_photo')}
                       className="hidden"
