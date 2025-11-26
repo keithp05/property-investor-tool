@@ -1189,9 +1189,9 @@ function PropertyAnalysisContent() {
                 {report.governmentHousing && (
                   <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
                     <p className="text-sm text-gray-600 mb-1">Section 8</p>
-                    <p className="text-xl font-bold text-green-600">${report.governmentHousing.fairMarketRent?.toLocaleString() || '0'}/mo</p>
-                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.governmentHousing.fairMarketRent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      Cash Flow: ${calculateCashFlow(report.governmentHousing.fairMarketRent || 0).toLocaleString()}/mo
+                    <p className="text-xl font-bold text-green-600">${report.governmentHousing.estimatedSection8Rent?.toLocaleString() || '0'}/mo</p>
+                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.governmentHousing.estimatedSection8Rent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      Cash Flow: ${calculateCashFlow(report.governmentHousing.estimatedSection8Rent || 0).toLocaleString()}/mo
                     </p>
                   </div>
                 )}
