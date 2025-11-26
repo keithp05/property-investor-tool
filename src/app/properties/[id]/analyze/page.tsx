@@ -83,6 +83,7 @@ function PropertyAnalysisContent() {
   const [propertyTax, setPropertyTax] = useState(0);
   const [insurance, setInsurance] = useState(150);
   const [hoa, setHoa] = useState(0);
+  const [includeRemodelInFinancing, setIncludeRemodelInFinancing] = useState(true); // Finance total investment
 
   // Remodel cost tracking
   const [remodelCosts, setRemodelCosts] = useState({
@@ -145,11 +146,14 @@ function PropertyAnalysisContent() {
     }
   }, [offerPrice]);
 
-  // Calculate mortgage payment using offer price
+  // Calculate mortgage payment using total investment (offer + remodel)
   const calculateMortgage = () => {
     const purchasePrice = offerPrice || Number(price);
-    const downPayment = purchasePrice * (downPaymentPercent / 100);
-    const loanAmount = purchasePrice - downPayment;
+    const totalInvestment = includeRemodelInFinancing 
+      ? purchasePrice + getTotalRemodelCost() 
+      : purchasePrice;
+    const downPayment = totalInvestment * (downPaymentPercent / 100);
+    const loanAmount = totalInvestment - downPayment;
     const monthlyRate = interestRate / 100 / 12;
     const numPayments = loanTermYears * 12;
 
@@ -820,6 +824,28 @@ function PropertyAnalysisContent() {
             {/* Mortgage & Expense Inputs */}
             <div className="border-t pt-6 mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Financing Details</h3>
+              
+              {/* Include Remodel in Financing Toggle */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeRemodelInFinancing}
+                    onChange={(e) => setIncludeRemodelInFinancing(e.target.checked)}
+                    className="w-5 h-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-gray-900">Finance Total Investment (Offer + Remodel)</span>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {includeRemodelInFinancing 
+                        ? `Loan based on ${(offerPrice + getTotalRemodelCost()).toLocaleString()} total investment`
+                        : `Loan based on ${offerPrice.toLocaleString()} offer price only`
+                      }
+                    </p>
+                  </div>
+                </label>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Down Payment %</label>
