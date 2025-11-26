@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { FileText, Loader2, CheckCircle, Home, Briefcase, Users, PawPrint, CreditCard } from 'lucide-react';
+import { FileText, Loader2, CheckCircle, Home, Briefcase, Users, PawPrint, CreditCard, Upload } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Dynamically import Stripe component (client-side only)
@@ -693,13 +693,109 @@ export default function TenantApplicationPage() {
                 <FileText className="h-6 w-6 text-indigo-600" />
                 Document Upload
               </h2>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                <p className="text-gray-600 mb-4">Upload required documents:</p>
-                <ul className="text-sm text-gray-500 mb-6 text-left max-w-md mx-auto">
-                  <li>• Last 2 pay stubs (or proof of income)</li>
-                  <li>• Government-issued photo ID (Driver's License, Passport)</li>
-                </ul>
-                <p className="text-sm text-amber-600">⚠️ Document upload feature coming soon. You may submit your application without documents for now.</p>
+              
+              {/* Pay Stubs Upload */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <h3 className="font-medium text-gray-900 mb-3">Pay Stubs (Last 2) *</h3>
+                <p className="text-sm text-gray-600 mb-4">Upload your last 2 pay stubs or proof of income</p>
+                
+                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                  <Upload className="h-5 w-5" />
+                  Choose Files
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={async (e) => {
+                      const files = e.target.files;
+                      if (!files) return;
+                      const urls: string[] = [];
+                      for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        const reader = new FileReader();
+                        await new Promise<void>((resolve) => {
+                          reader.onload = () => {
+                            urls.push(reader.result as string);
+                            resolve();
+                          };
+                          reader.readAsDataURL(file);
+                        });
+                      }
+                      setFormData({ ...formData, payStubsUrls: [...formData.payStubsUrls, ...urls] });
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                
+                {formData.payStubsUrls.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {formData.payStubsUrls.map((url, index) => (
+                      <div key={index} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <span className="text-sm text-gray-700">Pay Stub {index + 1} uploaded</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newUrls = formData.payStubsUrls.filter((_, i) => i !== index);
+                            setFormData({ ...formData, payStubsUrls: newUrls });
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ID Document Upload */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <h3 className="font-medium text-gray-900 mb-3">Government-Issued Photo ID *</h3>
+                <p className="text-sm text-gray-600 mb-4">Driver's License, Passport, or State ID</p>
+                
+                {formData.idDocumentUrl ? (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <span className="text-sm text-gray-700">ID document uploaded</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, idDocumentUrl: '' })}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                    <Upload className="h-5 w-5" />
+                    Choose File
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setFormData({ ...formData, idDocumentUrl: reader.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> Your documents are encrypted and securely stored. They will only be used for verification purposes.
+                </p>
               </div>
             </div>
           )}

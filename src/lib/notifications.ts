@@ -263,3 +263,159 @@ RentalIQ Property Management`;
 
   return { emailSent, smsSent };
 }
+
+/**
+ * Send application status notification (approval/denial) via email and SMS
+ */
+export async function sendApplicationStatusNotification({
+  name,
+  email,
+  phone,
+  propertyAddress,
+  status,
+  denialReason,
+}: {
+  name: string;
+  email: string;
+  phone?: string;
+  propertyAddress: string;
+  status: 'APPROVED' | 'DENIED';
+  denialReason?: string;
+}): Promise<{ emailSent: boolean; smsSent: boolean }> {
+  const isApproved = status === 'APPROVED';
+  
+  // Email content based on status
+  const emailSubject = isApproved
+    ? `🎉 Congratulations! Your Application for ${propertyAddress} Has Been Approved`
+    : `Application Update for ${propertyAddress}`;
+
+  const emailBody = isApproved
+    ? `Hi ${name},
+
+Great news! Your rental application for ${propertyAddress} has been APPROVED!
+
+Next Steps:
+- We will contact you shortly to discuss move-in details
+- Please prepare your security deposit and first month's rent
+- We'll schedule a time for lease signing and key pickup
+
+We're excited to have you as our new tenant!
+
+If you have any questions, please don't hesitate to reach out.
+
+Best regards,
+RentalIQ Property Management`
+    : `Hi ${name},
+
+Thank you for your interest in ${propertyAddress} and for taking the time to submit your rental application.
+
+After careful review, we regret to inform you that we are unable to approve your application at this time.${denialReason ? `\n\nReason: ${denialReason}` : ''}
+
+We encourage you to:
+- Continue searching for properties that match your needs
+- Review your application for any areas that could be improved
+- Consider reaching out if you have any questions
+
+We wish you the best in your housing search.
+
+Best regards,
+RentalIQ Property Management`;
+
+  const emailHtml = isApproved
+    ? `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #10B981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .badge { display: inline-block; padding: 8px 16px; background-color: #10B981; color: white; border-radius: 20px; font-weight: bold; }
+    .next-steps { background-color: white; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10B981; }
+    .next-steps h3 { margin-top: 0; color: #10B981; }
+    .next-steps li { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎉 Application Approved!</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${name},</p>
+      <p><strong>Great news!</strong> Your rental application for <strong>${propertyAddress}</strong> has been:</p>
+      <center><span class="badge">✓ APPROVED</span></center>
+      <div class="next-steps">
+        <h3>Next Steps</h3>
+        <ul>
+          <li>We will contact you shortly to discuss move-in details</li>
+          <li>Please prepare your security deposit and first month's rent</li>
+          <li>We'll schedule a time for lease signing and key pickup</li>
+        </ul>
+      </div>
+      <p>We're excited to have you as our new tenant!</p>
+      <p>If you have any questions, please don't hesitate to reach out.</p>
+      <p>Best regards,<br><strong>RentalIQ Property Management</strong></p>
+    </div>
+  </div>
+</body>
+</html>`
+    : `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #6B7280; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .status-box { background-color: #FEF2F2; border: 1px solid #FECACA; padding: 15px; border-radius: 6px; margin: 20px 0; }
+    .encouragement { background-color: white; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #6366F1; }
+    .encouragement h3 { margin-top: 0; color: #6366F1; }
+    .encouragement li { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Application Update</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${name},</p>
+      <p>Thank you for your interest in <strong>${propertyAddress}</strong> and for taking the time to submit your rental application.</p>
+      <div class="status-box">
+        <p>After careful review, we regret to inform you that we are unable to approve your application at this time.</p>
+        ${denialReason ? `<p><strong>Reason:</strong> ${denialReason}</p>` : ''}
+      </div>
+      <div class="encouragement">
+        <h3>Moving Forward</h3>
+        <ul>
+          <li>Continue searching for properties that match your needs</li>
+          <li>Review your application for any areas that could be improved</li>
+          <li>Consider reaching out if you have any questions</li>
+        </ul>
+      </div>
+      <p>We wish you the best in your housing search.</p>
+      <p>Best regards,<br><strong>RentalIQ Property Management</strong></p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  // SMS content (shorter)
+  const smsMessage = isApproved
+    ? `🎉 Hi ${name}! Great news - your rental application for ${propertyAddress} has been APPROVED! We'll be in touch soon with next steps.`
+    : `Hi ${name}, thank you for applying to ${propertyAddress}. Unfortunately, we're unable to approve your application at this time. Please check your email for details.`;
+
+  // Send email (always)
+  const emailSent = await sendEmail({ to: email, subject: emailSubject, body: emailBody, html: emailHtml });
+  
+  // Send SMS only if phone number provided
+  let smsSent = false;
+  if (phone) {
+    smsSent = await sendSMS({ phoneNumber: phone, message: smsMessage });
+  }
+
+  return { emailSent, smsSent };
+}

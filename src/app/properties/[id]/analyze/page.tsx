@@ -290,76 +290,95 @@ function PropertyAnalysisContent() {
 
   // Handle document upload (supports multiple files for repair photos)
   const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>, documentType: 'comps' | 'estimate' | 'inspection' | 'repair_photo') => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    // IMPORTANT: Copy FileList to array immediately before any async operations
+    // FileList can become stale/empty during async processing
+    const filesArray: File[] = Array.from(fileList);
+    
+    // Reset the input immediately so user can select same files again if needed
+    e.target.value = '';
 
     setUploadingDocument(true);
-    const totalFiles = files.length;
+    const totalFiles = filesArray.length;
     let processedCount = 0;
     let successCount = 0;
 
+    console.log(`Starting upload of ${totalFiles} files for ${documentType}`);
+
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (const file of filesArray) {
         processedCount++;
         setDocumentUploadStatus(`Processing ${processedCount}/${totalFiles}: ${file.name}...`);
+        console.log(`Processing file ${processedCount}/${totalFiles}: ${file.name}`);
 
         const formData = new FormData();
         formData.append('file', file);
         formData.append('type', documentType);
         formData.append('propertyId', params.id as string);
 
-        const response = await fetch('/api/documents/upload', {
-          method: 'POST',
-          body: formData,
-        });
+        try {
+          const response = await fetch('/api/documents/upload', {
+            method: 'POST',
+            body: formData,
+          });
 
-        const result = await response.json();
+          const result = await response.json();
 
-        if (result.success) {
-          successCount++;
-          setUploadedDocuments(prev => [...prev, result.document]);
+          if (result.success) {
+            successCount++;
+            console.log(`Successfully processed: ${file.name}`);
+            setUploadedDocuments(prev => [...prev, result.document]);
 
-          // Auto-populate data based on document type
-          if (documentType === 'comps' && result.extractedData.comps) {
-            const extractedComps = result.extractedData.comps.map((comp: any) => ({
-              id: Date.now().toString() + Math.random(),
-              address: comp.address,
-              price: comp.price || comp.rentPrice || 0,
-              bedrooms: comp.bedrooms || 0,
-              bathrooms: comp.bathrooms || 0,
-              sqft: comp.sqft || 0,
-              soldDate: comp.soldDate || new Date().toISOString().split('T')[0],
-              source: 'document',
-            }));
-            setManualComps(prev => [...prev, ...extractedComps]);
-          } else if (documentType === 'estimate' && result.extractedData.lineItems) {
-            const newRemodelCosts = { ...remodelCosts };
-            result.extractedData.lineItems.forEach((item: any) => {
-              const category = item.category as keyof typeof remodelCosts;
-              if (category in newRemodelCosts) {
-                newRemodelCosts[category] += item.cost || 0;
-              }
-            });
-            setRemodelCosts(newRemodelCosts);
-          } else if (documentType === 'repair_photo' && result.extractedData.estimatedCost) {
-            const avgCost = result.extractedData.estimatedCost.average || 0;
-            const category = result.extractedData.issueType as keyof typeof remodelCosts;
-            if (category in remodelCosts) {
-              // Auto-add costs for batch uploads
-              setRemodelCosts(prev => ({
-                ...prev,
-                [category]: prev[category] + avgCost
+            // Auto-populate data based on document type
+            if (documentType === 'comps' && result.extractedData?.comps) {
+              const extractedComps = result.extractedData.comps.map((comp: any) => ({
+                id: Date.now().toString() + Math.random(),
+                address: comp.address,
+                price: comp.price || comp.rentPrice || 0,
+                bedrooms: comp.bedrooms || 0,
+                bathrooms: comp.bathrooms || 0,
+                sqft: comp.sqft || 0,
+                soldDate: comp.soldDate || new Date().toISOString().split('T')[0],
+                source: 'document',
               }));
+              setManualComps(prev => [...prev, ...extractedComps]);
+            } else if (documentType === 'estimate' && result.extractedData?.lineItems) {
+              setRemodelCosts(prev => {
+                const updated = { ...prev };
+                result.extractedData.lineItems.forEach((item: any) => {
+                  const category = item.category as keyof typeof remodelCosts;
+                  if (category in updated) {
+                    updated[category] += item.cost || 0;
+                  }
+                });
+                return updated;
+              });
+            } else if (documentType === 'repair_photo' && result.extractedData?.estimatedCost) {
+              const avgCost = result.extractedData.estimatedCost.average || 0;
+              const category = result.extractedData.issueType as keyof typeof remodelCosts;
+              if (category && category in remodelCosts) {
+                setRemodelCosts(prev => ({
+                  ...prev,
+                  [category]: (prev[category] || 0) + avgCost
+                }));
+              }
             }
+          } else {
+            console.error(`Failed to process ${file.name}:`, result.error);
           }
+        } catch (fileError) {
+          console.error(`Error uploading ${file.name}:`, fileError);
         }
       }
 
       if (successCount === totalFiles) {
-        setDocumentUploadStatus(`Successfully processed ${successCount} file${successCount > 1 ? 's' : ''}`);
-      } else {
+        setDocumentUploadStatus(`✓ Successfully processed ${successCount} file${successCount > 1 ? 's' : ''}`);
+      } else if (successCount > 0) {
         setDocumentUploadStatus(`Processed ${successCount}/${totalFiles} files successfully`);
+      } else {
+        setDocumentUploadStatus(`Failed to process files`);
       }
       setTimeout(() => setDocumentUploadStatus(''), 5000);
 
@@ -368,7 +387,6 @@ function PropertyAnalysisContent() {
       setDocumentUploadStatus('Upload failed');
     } finally {
       setUploadingDocument(false);
-      e.target.value = '';
     }
   };
 

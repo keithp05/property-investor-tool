@@ -839,6 +839,126 @@ git push origin develop       # Auto-deploys to AWS Amplify
 
 ---
 
+## Bug Fixes & Updates Log
+
+### November 26, 2024 - Session 1
+
+**Developer**: Keith Perez  
+**AI Assistant**: Claude (Anthropic)
+
+#### 1. JSX Syntax Error Fix
+- **Issue**: Build failing due to JSX indentation error in analyze page
+- **File**: `src/app/properties/[id]/analyze/page.tsx`
+- **Fix**: Corrected indentation in Financing Details section (line ~814)
+- **Build**: #93 succeeded
+
+#### 2. Git Security Remediation
+- **Issue**: GitHub push protection blocked due to exposed API keys in DEVELOPMENT_PROGRESS.md
+- **Secrets Exposed**: AWS Access Key, AWS Secret Key, Stripe Test Key
+- **Fix**: Interactive rebase to rewrite git history, redacted all secrets with placeholders
+- **Commands Used**: `git rebase -i`, `git commit --amend`, `git push --force`
+
+#### 3. Offer Price Calculation Fix
+- **Issue**: Total Investment and mortgage using listing price instead of offer price
+- **File**: `src/app/properties/[id]/analyze/page.tsx` (lines 1030-1038)
+- **Fix**: Changed calculations to use `offerPrice` state variable
+- **Result**: Total Investment = Offer Price + Remodel Costs (correct)
+- **Build**: #95 succeeded
+
+#### 4. OpenAI API Key Configuration
+- **Issue**: OPENAI_API_KEY not accessible in serverless functions
+- **File**: `next.config.ts`
+- **Fix**: Added OPENAI_API_KEY to env section for serverless access
+
+#### 5. Document Upload API Rewrite
+- **Issue**: 500 errors, 413 errors, OpenAI client initialized at module load
+- **File**: `src/app/api/documents/upload/route.ts`
+- **Fixes**:
+  - Moved OpenAI initialization inside POST function (serverless compatible)
+  - Added 10MB file size validation
+  - Added 60-second timeout for AI processing
+  - Enhanced error handling with specific messages
+- **Build**: #96 succeeded
+
+#### 6. Section 8 Cash Flow Display Fix
+- **Issue**: Section 8 showing $0/mo in Cash Flow section
+- **File**: `src/app/properties/[id]/analyze/page.tsx`
+- **Fix**: Changed `fairMarketRent` to `estimatedSection8Rent` property
+- **Build**: #99 succeeded
+
+#### 7. PDF Upload Support
+- **Issue**: OpenAI Vision API error "Invalid MIME type" for PDFs
+- **Files**: `package.json`, `src/app/api/documents/upload/route.ts`
+- **Fix**: Added pdf-parse library, detect file type and use text extraction for PDFs vs Vision for images
+- **Build**: #101 succeeded
+
+#### 8. Multi-File Upload for Repair Photos
+- **Issue**: Users needed to upload multiple repair photos at once
+- **File**: `src/app/properties/[id]/analyze/page.tsx`
+- **Fix**: Added `multiple` attribute, loop through files, progress indicator
+- **Build**: #102 succeeded
+
+#### 9. Expert Analyses Missing Data Fix
+- **Issue**: AI experts showing $0 estimated value, missing confidence %, minimal suggestions
+- **File**: `src/services/propertyAnalysisService.ts`
+- **Fix**: Added all required fields to AI-powered expert analyses (expertise, rating, estimatedValue, confidenceLevel, pros, cons)
+- **Build**: #103 succeeded
+
+#### 10. Total Investment Financing Option
+- **Issue**: Mortgage calculation not including remodel costs
+- **File**: `src/app/properties/[id]/analyze/page.tsx`
+- **Fix**: Added `includeRemodelInFinancing` toggle, mortgage now calculates on total investment
+- **Build**: #103 succeeded
+
+### November 26, 2025 - Session 2
+
+**Developer**: Keith Perez  
+**AI Assistant**: Claude (Anthropic)
+
+#### 11. Application Denial/Approval Email Notifications
+- **Issue**: No email sent to applicants when application is approved or denied
+- **Files**: 
+  - `src/lib/notifications.ts` - Added `sendApplicationStatusNotification` function
+  - `src/app/api/applications/update-status/route.ts` - Integrated notification sending
+- **Features**:
+  - Professional HTML email templates for both approval and denial
+  - SMS notification support (if phone number provided)
+  - Optional denial reason field
+  - Graceful error handling (status updates even if notification fails)
+- **Build**: Pending
+
+#### 12. Multi-File Upload Fix (In Progress)
+- **Issue**: Only first photo uploaded when selecting multiple repair photos
+- **File**: `src/app/properties/[id]/analyze/page.tsx`
+- **Root Cause**: FileList object becoming stale during async operations
+- **Fix**: Copy FileList to array immediately before async processing
+- **Build**: Pending
+
+#### 13. Full Application View Page
+- **Issue**: Landlords could not see full application details (only summary in list)
+- **Files Created**:
+  - `src/app/api/applications/[id]/route.ts` - API to fetch full application
+  - `src/app/applications/[id]/page.tsx` - Full application detail page
+- **Features**:
+  - Complete applicant info (name, email, phone, DOB, SSN last 4)
+  - Current & previous employment details
+  - Current & previous rental history with landlord contacts
+  - References with contact info
+  - Pets & additional occupants
+  - Credit score & background check results
+  - Uploaded documents (pay stubs, ID)
+  - Payment status
+  - Approve/Deny buttons with notification
+- **Build**: Pending
+
+#### 14. Denial Reason Not Sent to API (Fixed)
+- **Issue**: Denial reason was captured but not included in API request
+- **File**: `src/app/tenants/page.tsx`
+- **Fix**: Added `denialReason` to request body in `handleDenyApplication`
+- **Build**: Pending
+
+---
+
 ## Testing Checklist
 
 ### Property Search

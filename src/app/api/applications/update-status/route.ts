@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { sendApplicationStatusNotification } from '@/lib/notifications';
 
 /**
  * Update application status (APPROVE or DENY)
@@ -17,7 +18,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { applicationId, status } = await request.json();
+    const { applicationId, status, denialReason } = await request.json();
 
     // Validate status
     if (!['APPROVED', 'DENIED'].includes(status)) {
@@ -66,10 +67,33 @@ export async function PATCH(request: NextRequest) {
 
     console.log(`✅ Application ${applicationId} ${status}`);
 
+    // Send notification email to applicant
+    let notificationResult = { emailSent: false, smsSent: false };
+    try {
+      const applicantName = `${application.firstName} ${application.lastName}`;
+      const propertyAddress = application.property?.address || 'the property';
+      
+      console.log(`📧 Sending ${status} notification to ${application.email}`);
+      
+      notificationResult = await sendApplicationStatusNotification({
+        name: applicantName,
+        email: application.email,
+        phone: application.phone || undefined,
+        propertyAddress,
+        status: status as 'APPROVED' | 'DENIED',
+        denialReason: status === 'DENIED' ? denialReason : undefined,
+      });
+      
+      console.log(`📧 Notification result - Email: ${notificationResult.emailSent}, SMS: ${notificationResult.smsSent}`);
+    } catch (notifError: any) {
+      console.error('⚠️ Failed to send notification, but application status was updated:', notifError.message);
+    }
+
     return NextResponse.json({
       success: true,
       application: updatedApplication,
       message: `Application ${status.toLowerCase()} successfully`,
+      notificationSent: notificationResult.emailSent || notificationResult.smsSent,
     });
   } catch (error: any) {
     console.error('❌ Error updating application status:', error);

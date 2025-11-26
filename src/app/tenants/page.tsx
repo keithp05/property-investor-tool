@@ -122,7 +122,10 @@ export default function TenantsPage() {
       const data = await response.json();
 
       if (data.success) {
-        alert('✅ Application approved! Tenant profile created.');
+        const notifMsg = data.notificationSent 
+          ? 'Applicant has been notified via email.' 
+          : '';
+        alert(`✅ Application approved! Tenant profile created. ${notifMsg}`);
         // Refresh applications list
         await fetchApplications();
       } else {
@@ -142,13 +145,16 @@ export default function TenantsPage() {
       const response = await fetch('/api/applications/update-status', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ applicationId, status: 'DENIED' }),
+        body: JSON.stringify({ applicationId, status: 'DENIED', denialReason: reason || undefined }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        alert('Application denied.');
+        const notifMsg = data.notificationSent 
+          ? 'Applicant has been notified via email.' 
+          : 'Note: Notification could not be sent.';
+        alert(`Application denied. ${notifMsg}`);
         // Refresh applications list
         await fetchApplications();
       } else {
@@ -508,12 +514,19 @@ export default function TenantsPage() {
 
                     {app.status === 'SUBMITTED' && (
                       <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
+                        <Link
+                          href={`/applications/${app.id}`}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View Full Application
+                        </Link>
                         <button
                           onClick={() => handleApproveApplication(app.id)}
                           className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
                         >
                           <CheckCircle className="h-4 w-4" />
-                          Approve & Create Tenant
+                          Approve
                         </button>
                         <button
                           onClick={() => handleDenyApplication(app.id)}
@@ -522,6 +535,19 @@ export default function TenantsPage() {
                           <XCircle className="h-4 w-4" />
                           Deny
                         </button>
+                      </div>
+                    )}
+
+                    {/* View button for all other statuses */}
+                    {app.status !== 'PENDING' && app.status !== 'SUBMITTED' && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <Link
+                          href={`/applications/${app.id}`}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 inline-flex items-center gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View Application Details
+                        </Link>
                       </div>
                     )}
                   </div>
