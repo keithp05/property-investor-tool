@@ -1,27 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// Route segment config - increase body size limit for file uploads
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-// Allow larger request bodies and longer timeout for AI processing
+// Allow longer timeout for AI processing
 export const maxDuration = 60;
 
 /**
  * Document Upload and AI Analysis API
- * Handles: PDFs, images (comp packets, estimates, inspection reports, repair photos)
- * Uses OpenAI Vision to extract structured data
+ * Handles: PDFs and images (comp packets, estimates, inspection reports, repair photos)
+ * Uses OpenAI Vision for images, text extraction + GPT-4 for PDFs
  */
 export async function POST(request: NextRequest) {
   try {
     // Initialize OpenAI inside the function to ensure env vars are available
     const apiKey = process.env.OPENAI_API_KEY;
     
-    console.log('OpenAI API Key check:', apiKey ? 'Present (' + apiKey.substring(0, 10) + '...)' : 'NOT FOUND');
+    console.log('OpenAI API Key check:', apiKey ? 'Present' : 'NOT FOUND');
     
     if (!apiKey) {
       console.error('OPENAI_API_KEY not found in environment');
@@ -49,50 +42,94 @@ export async function POST(request: NextRequest) {
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       return NextResponse.json(
-        { success: false, error: 'File too large. Maximum size is 10MB. Your file: ' + (file.size / 1024 / 1024).toFixed(2) + 'MB' },
+        { success: false, error: `File too large. Maximum size is 10MB. Your file: ${(file.size / 1024 / 1024).toFixed(2)}MB` },
         { status: 413 }
       );
     }
 
-    console.log('Processing ' + documentType + ' document: ' + file.name + ' (' + (file.size / 1024).toFixed(2) + ' KB)');
+    console.log(`Processing ${documentType} document: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
 
-    // Convert file to base64 for OpenAI Vision
+    const mimeType = file.type;
+    const isImage = mimeType.startsWith('image/');
+    const isPDF = mimeType === 'application/pdf';
+
+    if (!isImage && !isPDF) {
+      return NextResponse.json(
+        { success: false, error: `Unsupported file type: ${mimeType}. Please upload an image (PNG, JPG) or PDF.` },
+        { status: 400 }
+      );
+    }
+
+    // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const base64 = buffer.toString('base64');
-    const mimeType = file.type;
 
-    // Determine extraction prompt based on document type
-    const extractionPrompt = getExtractionPrompt(documentType);
+    let extractedData;
 
-    console.log('Analyzing document with OpenAI Vision...');
+    if (isImage) {
+      // Use OpenAI Vision for images
+      const base64 = buffer.toString('base64');
+      const extractionPrompt = getExtractionPrompt(documentType);
 
-    // Use OpenAI Vision to analyze the document
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: extractionPrompt,
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: 'data:' + mimeType + ';base64,' + base64,
-                detail: 'high',
+      console.log('Analyzing image with OpenAI Vision...');
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: extractionPrompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${mimeType};base64,${base64}`,
+                  detail: 'high',
+                },
               },
-            },
-          ],
-        },
-      ],
-      max_tokens: 4096,
-      response_format: { type: 'json_object' },
-    });
+            ],
+          },
+        ],
+        max_tokens: 4096,
+        response_format: { type: 'json_object' },
+      });
 
-    const extractedData = JSON.parse(response.choices[0].message.content || '{}');
+      extractedData = JSON.parse(response.choices[0].message.content || '{}');
+    } else if (isPDF) {
+      // Extract text from PDF and use GPT-4
+      console.log('Extracting text from PDF...');
+      
+      // Dynamic import for pdf-parse
+      const pdfParse = (await import('pdf-parse')).default;
+      const pdfData = await pdfParse(buffer);
+      const pdfText = pdfData.text;
+
+      if (!pdfText || pdfText.trim().length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Could not extract text from PDF. The PDF may be image-based. Please upload images instead.' },
+          { status: 400 }
+        );
+      }
+
+      console.log(`Extracted ${pdfText.length} characters from PDF`);
+      console.log('Analyzing PDF content with GPT-4...');
+
+      const extractionPrompt = getExtractionPrompt(documentType);
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: `${extractionPrompt}\n\nDocument content:\n${pdfText.substring(0, 30000)}`, // Limit text length
+          },
+        ],
+        max_tokens: 4096,
+        response_format: { type: 'json_object' },
+      });
+
+      extractedData = JSON.parse(response.choices[0].message.content || '{}');
+    }
 
     console.log('Document analyzed successfully');
 
@@ -124,10 +161,17 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    if (error.message?.includes('rate limit')) {
+    if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
       return NextResponse.json(
         { success: false, error: 'OpenAI rate limit exceeded. Please try again in a moment.' },
         { status: 429 }
+      );
+    }
+
+    if (error.message?.includes('MIME')) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid file type. Please upload an image (PNG, JPG, WEBP) or a text-based PDF.' },
+        { status: 400 }
       );
     }
 
@@ -144,18 +188,97 @@ export async function POST(request: NextRequest) {
 function getExtractionPrompt(documentType: string): string {
   switch (documentType) {
     case 'comps':
-      return 'Analyze this real estate comparable sales/rental document and extract ALL property data in JSON format. For each comparable property found, extract: { "comps": [ { "address": "full street address", "city": "city name", "state": "state", "zipCode": "zip code", "price": number, "rentPrice": number, "bedrooms": number, "bathrooms": number, "sqft": number, "yearBuilt": number, "soldDate": "YYYY-MM-DD", "daysOnMarket": number, "pricePerSqft": number, "type": "sale" or "rental", "status": "sold", "active", "rented" } ], "summary": "Brief summary" }. Extract ALL properties visible.';
+      return `Analyze this real estate comparable sales/rental document and extract ALL property data in JSON format.
+
+For each comparable property found, extract:
+{
+  "comps": [
+    {
+      "address": "full street address",
+      "city": "city name",
+      "state": "state",
+      "zipCode": "zip code",
+      "price": number (sold price or asking price),
+      "rentPrice": number (monthly rent if rental comp),
+      "bedrooms": number,
+      "bathrooms": number,
+      "sqft": number,
+      "yearBuilt": number,
+      "soldDate": "YYYY-MM-DD" (if sold),
+      "daysOnMarket": number,
+      "pricePerSqft": number,
+      "type": "sale" or "rental",
+      "status": "sold", "active", "rented", etc.
+    }
+  ],
+  "summary": "Brief summary of comps found"
+}
+
+Extract ALL properties visible in the document. Include rental comps and sales comps separately if both are present.`;
 
     case 'estimate':
-      return 'Analyze this contractor estimate and extract cost breakdowns in JSON: { "contractor": { "name": "company", "phone": "number", "email": "email" }, "estimateDate": "YYYY-MM-DD", "totalCost": number, "lineItems": [ { "category": "kitchen|bathroom|roofing|hvac|electrical|plumbing|flooring|paint|windows|other", "description": "description", "cost": number, "quantity": number, "unit": "sqft" } ], "notes": "notes" }';
+      return `Analyze this contractor estimate or repair quote and extract cost breakdowns in JSON format:
+
+{
+  "contractor": {
+    "name": "company name",
+    "phone": "phone number",
+    "email": "email if visible"
+  },
+  "estimateDate": "YYYY-MM-DD",
+  "totalCost": number,
+  "lineItems": [
+    {
+      "category": "kitchen" | "bathroom" | "roofing" | "hvac" | "electrical" | "plumbing" | "flooring" | "paint" | "windows" | "landscaping" | "other",
+      "description": "detailed description",
+      "cost": number,
+      "quantity": number,
+      "unit": "sqft, each, etc."
+    }
+  ],
+  "notes": "any additional notes or exclusions"
+}
+
+Extract all line items and categorize them appropriately.`;
 
     case 'inspection':
-      return 'Analyze this inspection report and extract findings in JSON: { "inspectionDate": "YYYY-MM-DD", "inspector": "name", "propertyAddress": "address", "majorIssues": [ { "category": "roof|foundation|electrical|plumbing|hvac|structural|other", "description": "issue", "severity": "critical|major|minor", "estimatedCost": number } ], "minorIssues": ["list"], "summary": "summary" }';
+      return `Analyze this property inspection report and extract key findings in JSON format:
+
+{
+  "inspectionDate": "YYYY-MM-DD",
+  "inspector": "inspector name/company",
+  "propertyAddress": "full address",
+  "majorIssues": [
+    {
+      "category": "roof" | "foundation" | "electrical" | "plumbing" | "hvac" | "structural" | "other",
+      "description": "issue description",
+      "severity": "critical" | "major" | "minor",
+      "estimatedCost": number (if mentioned)
+    }
+  ],
+  "minorIssues": ["list of minor issues"],
+  "summary": "overall inspection summary"
+}`;
 
     case 'repair_photo':
-      return 'Analyze this repair photo and estimate costs in JSON: { "issueType": "kitchen|bathroom|roofing|hvac|electrical|plumbing|flooring|paint|windows|structural|other", "description": "what needs repair", "severity": "minor|moderate|major", "estimatedCost": { "low": number, "high": number, "average": number }, "scopeOfWork": "recommended repairs", "notes": "observations" }. Provide realistic US contractor rates.';
+      return `Analyze this property repair/condition photo and provide a cost estimate in JSON format:
+
+{
+  "issueType": "kitchen" | "bathroom" | "roofing" | "hvac" | "electrical" | "plumbing" | "flooring" | "paint" | "windows" | "structural" | "landscaping" | "other",
+  "description": "detailed description of what needs repair",
+  "severity": "minor" | "moderate" | "major",
+  "estimatedCost": {
+    "low": number (conservative estimate),
+    "high": number (high estimate),
+    "average": number (average estimate)
+  },
+  "scopeOfWork": "recommended repairs and scope",
+  "notes": "any additional observations"
+}
+
+Provide realistic cost estimates based on typical contractor rates in the US.`;
 
     default:
-      return 'Analyze this document and extract all relevant real estate property information in JSON format.';
+      return `Analyze this document and extract all relevant real estate property information in JSON format.`;
   }
 }
