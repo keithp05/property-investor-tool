@@ -1028,11 +1028,11 @@ function PropertyAnalysisContent() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-gray-700">Total Investment</p>
-                      <p className="text-lg text-gray-600">${(Number(price) + getTotalRemodelCost()).toLocaleString()}</p>
+                      <p className="text-lg text-gray-600">${(offerPrice + getTotalRemodelCost()).toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-700">Purchase Price</p>
-                      <p className="text-lg text-gray-600">${Number(price).toLocaleString()}</p>
+                      <p className="text-sm font-semibold text-gray-700">Your Offer Price</p>
+                      <p className="text-lg text-gray-600">${offerPrice.toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-gray-700">Remodel Costs</p>
