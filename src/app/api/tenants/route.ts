@@ -50,7 +50,6 @@ export async function GET(request: NextRequest) {
               select: {
                 name: true,
                 email: true,
-                phone: true,
               },
             },
           },
@@ -75,7 +74,7 @@ export async function GET(request: NextRequest) {
       id: tenant.id,
       name: tenant.tenantProfile.user.name,
       email: tenant.tenantProfile.user.email,
-      phone: tenant.tenantProfile.user.phone,
+      phone: tenant.tenantProfile.phone || null,
       property: {
         id: tenant.property.id,
         address: tenant.property.address,
