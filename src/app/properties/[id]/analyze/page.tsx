@@ -815,36 +815,37 @@ function PropertyAnalysisContent() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Down Payment %</label>
-                <input
-                  type="number"
-                  value={downPaymentPercent}
-                  onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  min="0"
-                  max="100"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Interest Rate %</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={interestRate}
-                  onChange={(e) => setInterestRate(Number(e.target.value))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Loan Term (Years)</label>
-                <select
-                  value={loanTermYears}
-                  onChange={(e) => setLoanTermYears(Number(e.target.value))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                >
-                  <option value="15">15 Years</option>
-                  <option value="20">20 Years</option>
-                  <option value="30">30 Years</option>
-                </select>
+                  <input
+                    type="number"
+                    value={downPaymentPercent}
+                    onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    min="0"
+                    max="100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Interest Rate %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={interestRate}
+                    onChange={(e) => setInterestRate(Number(e.target.value))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Loan Term (Years)</label>
+                  <select
+                    value={loanTermYears}
+                    onChange={(e) => setLoanTermYears(Number(e.target.value))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="15">15 Years</option>
+                    <option value="20">20 Years</option>
+                    <option value="30">30 Years</option>
+                  </select>
+                </div>
               </div>
             </div>
 
