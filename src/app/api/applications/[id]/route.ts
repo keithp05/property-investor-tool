@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -21,7 +21,7 @@ export async function GET(
       );
     }
 
-    const applicationId = params.id;
+    const { id: applicationId } = await params;
     const userId = (session.user as any).id;
 
     console.log(`📋 Fetching application ${applicationId} for user ${userId}`);
