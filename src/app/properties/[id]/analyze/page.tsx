@@ -1192,7 +1192,7 @@ function PropertyAnalysisContent() {
               <div className={`grid grid-cols-2 ${enableRepairFund ? 'md:grid-cols-7' : 'md:grid-cols-6'} gap-4`}>
                 <div>
                   <p className="text-xs text-gray-600">Mortgage (P&I)</p>
-                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses().mortgage.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses(report?.estimatedRent || 0).mortgage.toLocaleString()}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Property Tax</p>
@@ -1204,7 +1204,7 @@ function PropertyAnalysisContent() {
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Repairs {repairPeriod === 'annual' && '(avg)'}</p>
-                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses().repairs.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses(report?.estimatedRent || 0).repairs.toLocaleString()}</p>
                   {repairPeriod === 'project' && (
                     <p className="text-xs text-gray-500 mt-1">Project: ${repairAmount.toLocaleString()}</p>
                   )}
@@ -1212,7 +1212,7 @@ function PropertyAnalysisContent() {
                 {enableRepairFund && (
                   <div>
                     <p className="text-xs text-gray-600">Repair Fund</p>
-                    <p className="text-lg font-bold text-blue-600">${calculateMonthlyExpenses().repairFund.toLocaleString()}</p>
+                    <p className="text-lg font-bold text-blue-600">${calculateMonthlyExpenses(report?.estimatedRent || 0).repairFund.toLocaleString()}</p>
                     <p className="text-xs text-gray-500 mt-1">{repairFundPercent}% reserve</p>
                   </div>
                 )}
@@ -1222,7 +1222,7 @@ function PropertyAnalysisContent() {
                 </div>
                 <div className="bg-indigo-100 rounded-lg p-2">
                   <p className="text-xs text-indigo-700 font-semibold">Total Expenses</p>
-                  <p className="text-lg font-bold text-indigo-900">${calculateMonthlyExpenses().total.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-indigo-900">${calculateMonthlyExpenses(report?.estimatedRent || 0).total.toLocaleString()}</p>
                 </div>
               </div>
             </div>
