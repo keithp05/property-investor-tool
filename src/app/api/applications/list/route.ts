@@ -11,40 +11,30 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const userId = (session.user as any).id;
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'User ID not found in session' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
     // Get landlord profile
     const landlordProfile = await prisma.landlordProfile.findUnique({
-      where: { userId },
+      where: { userId: session.user.id },
     });
 
     if (!landlordProfile) {
-      // Return empty list instead of error
-      return NextResponse.json({
-        success: true,
-        applications: [],
-      });
+      return NextResponse.json(
+        { error: 'Landlord profile not found' },
+        { status: 404 }
+      );
     }
 
     // Fetch all applications for this landlord
     // Note: landlordId in TenantApplication is the User ID, not LandlordProfile ID
     const applications = await prisma.tenantApplication.findMany({
       where: {
-        landlordId: userId,
+        landlordId: session.user.id,
       },
       include: {
         property: {
@@ -63,14 +53,14 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Format response with null checks
+    // Format response
     const formattedApplications = applications.map((app) => ({
       id: app.id,
       status: app.status,
       createdAt: app.createdAt,
       submittedAt: app.submittedAt,
       applicationLink: app.applicationLink,
-      fullLink: `${process.env.NEXTAUTH_URL || ''}/apply/${app.applicationLink}`,
+      fullLink: `${process.env.NEXTAUTH_URL}/apply/${app.applicationLink}`,
 
       // Applicant Info (only if submitted)
       applicant: app.status !== 'PENDING' ? {
@@ -84,7 +74,7 @@ export async function GET(request: NextRequest) {
       } : null,
 
       // Property Info
-      property: app.property ? {
+      property: {
         id: app.property.id,
         address: app.property.address,
         city: app.property.city,
@@ -92,14 +82,6 @@ export async function GET(request: NextRequest) {
         zipCode: app.property.zipCode,
         monthlyRent: app.property.monthlyRent,
         fullAddress: `${app.property.address}, ${app.property.city}, ${app.property.state} ${app.property.zipCode}`,
-      } : {
-        id: '',
-        address: 'Unknown',
-        city: '',
-        state: '',
-        zipCode: '',
-        monthlyRent: null,
-        fullAddress: 'Unknown Property',
       },
 
       // Payment Info
@@ -116,7 +98,6 @@ export async function GET(request: NextRequest) {
     console.error('Fetch applications error:', error);
     return NextResponse.json(
       {
-        success: false,
         error: 'Failed to fetch applications',
         details: error.message,
       },
