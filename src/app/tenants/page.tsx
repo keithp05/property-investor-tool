@@ -514,13 +514,6 @@ export default function TenantsPage() {
 
                     {app.status === 'SUBMITTED' && (
                       <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
-                        <Link
-                          href={`/applications/${app.id}`}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View Full Application
-                        </Link>
                         <button
                           onClick={() => handleApproveApplication(app.id)}
                           className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
@@ -535,19 +528,6 @@ export default function TenantsPage() {
                           <XCircle className="h-4 w-4" />
                           Deny
                         </button>
-                      </div>
-                    )}
-
-                    {/* View button for all other statuses */}
-                    {app.status !== 'PENDING' && app.status !== 'SUBMITTED' && (
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <Link
-                          href={`/applications/${app.id}`}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 inline-flex items-center gap-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View Application Details
-                        </Link>
                       </div>
                     )}
                   </div>
