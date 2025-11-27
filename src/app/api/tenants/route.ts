@@ -11,31 +11,35 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) {
+    if (!session?.user) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
+    const userId = (session.user as any).id;
+    const userRole = (session.user as any).role;
+
     // Check if user is a landlord
-    if (session.user.role !== 'LANDLORD') {
+    if (userRole !== 'LANDLORD') {
       return NextResponse.json(
-        { error: 'Only landlords can access tenant data' },
+        { success: false, error: 'Only landlords can access tenant data' },
         { status: 403 }
       );
     }
 
     // Get landlord profile
     const landlordProfile = await prisma.landlordProfile.findUnique({
-      where: { userId: session.user.id },
+      where: { userId },
     });
 
     if (!landlordProfile) {
-      return NextResponse.json(
-        { error: 'Landlord profile not found' },
-        { status: 404 }
-      );
+      // Return empty tenants list instead of error
+      return NextResponse.json({
+        success: true,
+        tenants: [],
+      });
     }
 
     // Fetch all tenants for this landlord with their property details
@@ -69,19 +73,21 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Format response
+    // Format response with null checks
     const formattedTenants = tenants.map((tenant) => ({
       id: tenant.id,
-      name: tenant.tenantProfile.user.name,
-      email: tenant.tenantProfile.user.email,
-      phone: tenant.tenantProfile.phone || null,
+      name: tenant.tenantProfile?.user?.name || 'Unknown',
+      email: tenant.tenantProfile?.user?.email || 'Unknown',
+      phone: tenant.tenantProfile?.phone || null,
       property: {
-        id: tenant.property.id,
-        address: tenant.property.address,
-        city: tenant.property.city,
-        state: tenant.property.state,
-        zipCode: tenant.property.zipCode,
-        fullAddress: `${tenant.property.address}, ${tenant.property.city}, ${tenant.property.state} ${tenant.property.zipCode}`,
+        id: tenant.property?.id || '',
+        address: tenant.property?.address || '',
+        city: tenant.property?.city || '',
+        state: tenant.property?.state || '',
+        zipCode: tenant.property?.zipCode || '',
+        fullAddress: tenant.property 
+          ? `${tenant.property.address}, ${tenant.property.city}, ${tenant.property.state} ${tenant.property.zipCode}`
+          : 'Unknown',
       },
       lease: {
         startDate: tenant.leaseStartDate,
@@ -101,6 +107,7 @@ export async function GET(request: NextRequest) {
     console.error('Fetch tenants error:', error);
     return NextResponse.json(
       {
+        success: false,
         error: 'Failed to fetch tenants',
         details: error.message,
       },
