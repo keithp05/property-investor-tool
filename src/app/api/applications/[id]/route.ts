@@ -60,7 +60,7 @@ export async function GET(
       );
     }
 
-    // Format the response (hide sensitive data like full SSN)
+    // Format the response with null checks
     const formattedApplication = {
       id: application.id,
       status: application.status,
@@ -68,32 +68,38 @@ export async function GET(
       submittedAt: application.submittedAt,
       applicationLink: application.applicationLink,
 
-      // Property
-      property: {
+      // Property (with null checks)
+      property: application.property ? {
         id: application.property.id,
         fullAddress: `${application.property.address}, ${application.property.city}, ${application.property.state} ${application.property.zipCode}`,
         bedrooms: application.property.bedrooms,
         bathrooms: application.property.bathrooms,
         monthlyRent: application.property.monthlyRent,
+      } : {
+        id: '',
+        fullAddress: 'Unknown Property',
+        bedrooms: 0,
+        bathrooms: 0,
+        monthlyRent: null,
       },
 
       // Primary Applicant
       applicant: {
-        fullName: application.fullName,
-        email: application.email,
-        phone: application.phone,
-        dateOfBirth: application.dateOfBirth,
+        fullName: application.fullName || null,
+        email: application.email || null,
+        phone: application.phone || null,
+        dateOfBirth: application.dateOfBirth || null,
         ssnLast4: application.ssn ? `***-**-${application.ssn.slice(-4)}` : null,
       },
 
       // Employment
       employment: {
         current: {
-          employerName: application.employerName,
-          employerPhone: application.employerPhone,
-          jobTitle: application.jobTitle,
-          monthlyIncome: application.monthlyIncome,
-          startDate: application.employmentStartDate,
+          employerName: application.employerName || null,
+          employerPhone: application.employerPhone || null,
+          jobTitle: application.jobTitle || null,
+          monthlyIncome: application.monthlyIncome || null,
+          startDate: application.employmentStartDate || null,
         },
         previous: application.previousEmployerName ? {
           employerName: application.previousEmployerName,
@@ -121,14 +127,14 @@ export async function GET(
       // Rental History
       rentalHistory: {
         current: {
-          address: application.currentAddress,
-          city: application.currentCity,
-          state: application.currentState,
-          zip: application.currentZip,
-          landlordName: application.currentLandlord,
-          landlordPhone: application.currentLandlordPhone,
-          monthlyRent: application.currentMonthlyRent,
-          moveInDate: application.currentMoveInDate,
+          address: application.currentAddress || null,
+          city: application.currentCity || null,
+          state: application.currentState || null,
+          zip: application.currentZip || null,
+          landlordName: application.currentLandlord || null,
+          landlordPhone: application.currentLandlordPhone || null,
+          monthlyRent: application.currentMonthlyRent || null,
+          moveInDate: application.currentMoveInDate || null,
         },
         previous: application.previousAddress ? {
           address: application.previousAddress,
@@ -141,33 +147,33 @@ export async function GET(
       },
 
       // Pets & Occupants
-      hasPets: application.hasPets,
-      petDetails: application.petDetails,
-      additionalOccupants: application.additionalOccupants,
+      hasPets: application.hasPets || false,
+      petDetails: application.petDetails || null,
+      additionalOccupants: application.additionalOccupants || null,
 
       // Second Applicant
-      hasSecondApplicant: application.hasSecondApplicant,
-      secondApplicant: application.secondApplicantInfo,
+      hasSecondApplicant: application.hasSecondApplicant || false,
+      secondApplicant: application.secondApplicantInfo || null,
 
       // Documents
       documents: {
         payStubs: application.payStubsUrls || [],
-        idDocument: application.idDocumentUrl,
+        idDocument: application.idDocumentUrl || null,
       },
 
       // Screening
       screening: {
-        creditScore: application.creditScore,
-        creditReportUrl: application.creditReportUrl,
-        backgroundCheckStatus: application.backgroundCheckStatus,
-        backgroundCheckReportUrl: application.backgroundCheckReportUrl,
+        creditScore: application.creditScore || null,
+        creditReportUrl: application.creditReportUrl || null,
+        backgroundCheckStatus: application.backgroundCheckStatus || null,
+        backgroundCheckReportUrl: application.backgroundCheckReportUrl || null,
       },
 
       // Payment
       payment: {
-        applicationFee: application.applicationFee,
-        feePaid: application.applicationFeePaid,
-        stripePaymentIntentId: application.stripePaymentIntentId,
+        applicationFee: application.applicationFee || 50,
+        feePaid: application.applicationFeePaid || false,
+        stripePaymentIntentId: application.stripePaymentIntentId || null,
       },
     };
 
