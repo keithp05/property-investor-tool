@@ -304,10 +304,13 @@ export default function ApplicationsPage() {
                         <XCircle className="h-4 w-4" />
                         Deny
                       </button>
-                      <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                      <Link
+                        href={`/applications/${app.id}`}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                      >
                         <Eye className="h-4 w-4" />
                         View Details
-                      </button>
+                      </Link>
                     </div>
                   )}
                 </div>
