@@ -512,24 +512,34 @@ export default function TenantsPage() {
                       </div>
                     </div>
 
-                    {app.status === 'SUBMITTED' && (
-                      <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
-                        <button
-                          onClick={() => handleApproveApplication(app.id)}
-                          className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleDenyApplication(app.id)}
-                          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
-                        >
-                          <XCircle className="h-4 w-4" />
-                          Deny
-                        </button>
-                      </div>
-                    )}
+                    {/* Action buttons */}
+                    <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
+                      {app.status === 'SUBMITTED' && (
+                        <>
+                          <button
+                            onClick={() => handleApproveApplication(app.id)}
+                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleDenyApplication(app.id)}
+                            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Deny
+                          </button>
+                        </>
+                      )}
+                      <Link
+                        href={`/applications/${app.id}`}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View Details
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>
