@@ -197,31 +197,78 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
       </section>
 
       {/* Documents */}
-      <section className="border rounded-lg p-4 space-y-2">
+      <section className="border rounded-lg p-4 space-y-4">
         <h2 className="text-lg font-semibold">Documents</h2>
-        <div className="text-sm space-y-2">
-          <div>
-            <span className="font-medium">Pay Stubs:</span>{" "}
-            {application.payStubsUrls && application.payStubsUrls.length > 0 ? (
-              <ul className="list-disc ml-5">
-                {application.payStubsUrls.map((url, i) => (
-                  <li key={i}>
-                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
-                      Document {i + 1}
+        
+        {/* Pay Stubs */}
+        <div>
+          <span className="font-medium text-sm">Pay Stubs:</span>
+          {application.payStubsUrls && application.payStubsUrls.length > 0 ? (
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {application.payStubsUrls.map((url, i) => (
+                <div key={i} className="border rounded-lg p-2">
+                  <p className="text-xs text-gray-500 mb-2">Pay Stub {i + 1}</p>
+                  {url.startsWith('data:image') ? (
+                    <img 
+                      src={url} 
+                      alt={`Pay Stub ${i + 1}`} 
+                      className="max-w-full h-auto max-h-64 object-contain"
+                    />
+                  ) : url.startsWith('data:application/pdf') ? (
+                    <div className="bg-gray-100 p-4 rounded text-center">
+                      <p className="text-sm text-gray-600">PDF Document</p>
+                      <a 
+                        href={url} 
+                        download={`paystub-${i + 1}.pdf`}
+                        className="text-indigo-600 hover:underline text-sm"
+                      >
+                        Download PDF
+                      </a>
+                    </div>
+                  ) : (
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline text-sm">
+                      View Document
                     </a>
-                  </li>
-                ))}
-              </ul>
-            ) : "None uploaded"}
-          </div>
-          <p>
-            <span className="font-medium">ID Document:</span>{" "}
-            {application.idDocumentUrl ? (
-              <a href={application.idDocumentUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
-                View Document
-              </a>
-            ) : "Not uploaded"}
-          </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 mt-1">None uploaded</p>
+          )}
+        </div>
+
+        {/* ID Document */}
+        <div>
+          <span className="font-medium text-sm">ID Document:</span>
+          {application.idDocumentUrl ? (
+            <div className="mt-2 border rounded-lg p-2 max-w-md">
+              {application.idDocumentUrl.startsWith('data:image') ? (
+                <img 
+                  src={application.idDocumentUrl} 
+                  alt="ID Document" 
+                  className="max-w-full h-auto max-h-64 object-contain"
+                />
+              ) : application.idDocumentUrl.startsWith('data:application/pdf') ? (
+                <div className="bg-gray-100 p-4 rounded text-center">
+                  <p className="text-sm text-gray-600">PDF Document</p>
+                  <a 
+                    href={application.idDocumentUrl} 
+                    download="id-document.pdf"
+                    className="text-indigo-600 hover:underline text-sm"
+                  >
+                    Download PDF
+                  </a>
+                </div>
+              ) : (
+                <a href={application.idDocumentUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline text-sm">
+                  View Document
+                </a>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 mt-1">Not uploaded</p>
+          )}
         </div>
       </section>
 
