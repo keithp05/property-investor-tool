@@ -35,6 +35,7 @@ model User {
   sessions      Session[]
   landlordProfile LandlordProfile?
   tenantProfile   TenantProfile?
+  proProfile      ProProfile?
   tenantApplications TenantApplication[]
 
   createdAt     DateTime  @default(now())
@@ -103,6 +104,8 @@ model LandlordProfile {
   // Relations
   properties      Property[]
   tenants         Tenant[]
+  preferredPros   LandlordPro[]
+  serviceRequests ServiceRequest[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -123,6 +126,429 @@ model TenantProfile {
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ============================================================================
+// SERVICE PROFESSIONALS (PRO)
+// ============================================================================
+
+model ProProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Business Info
+  businessName    String
+  phone           String
+  businessAddress String?
+  city            String?
+  state           String?
+  zipCode         String?
+  serviceRadius   Int      @default(25) // Miles willing to travel
+
+  // Verification
+  isVerified      Boolean  @default(false)
+  licenseNumber   String?
+  insuranceProvider String?
+  insurancePolicyNumber String?
+  insuranceExpiry DateTime?
+
+  // Services Offered (e.g., PLUMBING, ELECTRICAL, HVAC, GENERAL)
+  serviceCategories String[] // Array of service types
+  specialties       String?  // Free text for specific skills
+
+  // Rates
+  hourlyRate      Decimal?
+  callOutFee      Decimal?  // Minimum charge for showing up
+  emergencyRate   Decimal?  // Rate for emergency calls
+
+  // Availability
+  availability    Json?     // Weekly schedule: {"monday": {"start": "08:00", "end": "17:00"}, ...}
+  acceptsEmergency Boolean @default(false)
+
+  // Stripe Connect for payments
+  stripeConnectId      String?  @unique
+  stripeConnectOnboarded Boolean @default(false)
+
+  // Ratings
+  averageRating   Float    @default(0)
+  totalReviews    Int      @default(0)
+  totalJobsCompleted Int   @default(0)
+
+  // Profile
+  bio             String?
+  profilePhotoUrl String?
+  portfolioPhotos String[] // Array of work sample URLs
+
+  // Relations
+  landlordConnections LandlordPro[]
+  serviceRequests     ServiceRequest[]
+  appointments        Appointment[]
+  reviews             ProReview[]
+  messages            ServiceMessage[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([zipCode])
+  @@index([serviceCategories])
+}
+
+// Landlord <-> Pro relationship (preferred pros)
+model LandlordPro {
+  id              String   @id @default(cuid())
+  landlordId      String
+  landlord        LandlordProfile @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+  proId           String
+  pro             ProProfile @relation(fields: [proId], references: [id], onDelete: Cascade)
+
+  // Relationship Status
+  status          ProConnectionStatus @default(PENDING)
+  invitedAt       DateTime @default(now())
+  acceptedAt      DateTime?
+
+  // How they connected
+  invitedBy       InvitedBy @default(LANDLORD) // LANDLORD invited PRO, or PRO requested
+  inviteEmail     String?   // Email used for invitation
+  invitePhone     String?   // Phone used for SMS invitation
+
+  // Preference
+  isPrimary       Boolean  @default(false) // Primary pro for specific category
+  primaryForCategory String? // e.g., "PLUMBING" - this pro is primary for plumbing
+
+  // Notes
+  landlordNotes   String?  // Private notes from landlord about this pro
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([landlordId, proId])
+  @@index([landlordId])
+  @@index([proId])
+}
+
+// Service Request (enhanced maintenance request)
+model ServiceRequest {
+  id              String   @id @default(cuid())
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  landlordId      String
+  landlord        LandlordProfile @relation(fields: [landlordId], references: [id])
+
+  // Optional: linked to tenant who reported
+  tenantId        String?
+  reportedByTenantName String?
+  reportedByTenantPhone String?
+  reportedByTenantEmail String?
+
+  // Assigned Pro
+  proId           String?
+  pro             ProProfile? @relation(fields: [proId], references: [id])
+  assignedAt      DateTime?
+
+  // Request Details
+  title           String
+  description     String
+  category        ServiceCategory
+  priority        Priority @default(MEDIUM)
+  status          ServiceRequestStatus @default(SUBMITTED)
+
+  // Photos from tenant/landlord
+  photos          String[]  // Array of URLs
+
+  // AI-Generated Scope of Work
+  scopeOfWork     ScopeOfWork?
+
+  // Scheduling
+  preferredDate   DateTime?
+  preferredTimeSlot String?  // e.g., "morning", "afternoon", "evening"
+  scheduledDate   DateTime?
+  scheduledTime   String?
+
+  // Completion
+  completedAt     DateTime?
+  completionNotes String?
+  completionPhotos String[]  // Before/after photos from Pro
+
+  // Payment
+  estimatedCost   Decimal?
+  finalCost       Decimal?
+  paymentStatus   ServicePaymentStatus @default(PENDING)
+  stripePaymentIntentId String?
+  paidAt          DateTime?
+
+  // Relations
+  changeOrders    ChangeOrder[]
+  messages        ServiceMessage[]
+  appointments    Appointment[]
+  review          ProReview?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([propertyId])
+  @@index([landlordId])
+  @@index([proId])
+  @@index([status])
+}
+
+// AI-generated Scope of Work
+model ScopeOfWork {
+  id              String   @id @default(cuid())
+  serviceRequestId String  @unique
+  serviceRequest  ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  // AI Analysis
+  problemSummary  String   // AI summary of the problem
+  workDescription String   // Detailed description of work needed
+  materialsNeeded Json?    // [{"item": "...", "quantity": 1, "estimatedCost": 50}]
+  laborEstimate   String?  // e.g., "2-3 hours"
+
+  // Cost Estimates
+  estimatedLaborCost   Decimal?
+  estimatedMaterialCost Decimal?
+  estimatedTotalCost   Decimal?
+  costRange            String?  // e.g., "$150 - $250"
+
+  // Complexity
+  complexity      JobComplexity @default(MODERATE)
+  urgencyReason   String?       // Why AI thinks it's urgent (if applicable)
+
+  // Recommendations
+  suggestedCategory ServiceCategory?
+  diyPossible       Boolean @default(false)
+  diyInstructions   String?
+  requiresPermit    Boolean @default(false)
+  permitNotes       String?
+
+  // Approval
+  approvedByLandlord Boolean @default(false)
+  approvedAt         DateTime?
+  landlordNotes      String?
+
+  generatedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Change Order (additional work during service)
+model ChangeOrder {
+  id              String   @id @default(cuid())
+  serviceRequestId String
+  serviceRequest  ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  // Change Details
+  title           String
+  description     String
+  reason          String   // Why additional work is needed
+  photos          String[] // Photos showing why change is needed
+
+  // Cost
+  additionalCost  Decimal
+  laborCost       Decimal?
+  materialCost    Decimal?
+
+  // Approval
+  status          ChangeOrderStatus @default(PENDING)
+  submittedAt     DateTime @default(now())
+  landlordResponse String?
+  respondedAt     DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([serviceRequestId])
+}
+
+// Messages between Pro and Tenant (after dispatch)
+model ServiceMessage {
+  id              String   @id @default(cuid())
+  serviceRequestId String
+  serviceRequest  ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  // Sender
+  senderType      MessageSenderType
+  senderId        String   // Could be Pro, Tenant, or Landlord userId/profileId
+  senderName      String
+
+  // Optional: Pro reference
+  proId           String?
+  pro             ProProfile? @relation(fields: [proId], references: [id])
+
+  // Message Content
+  message         String
+  attachments     String[] // Photo/file URLs
+
+  // Read Status
+  readAt          DateTime?
+
+  createdAt       DateTime @default(now())
+
+  @@index([serviceRequestId])
+  @@index([senderId])
+}
+
+// Appointment/Scheduling
+model Appointment {
+  id              String   @id @default(cuid())
+  proId           String
+  pro             ProProfile @relation(fields: [proId], references: [id], onDelete: Cascade)
+
+  // Optional: linked to service request
+  serviceRequestId String?
+  serviceRequest  ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+
+  // Appointment Details
+  title           String
+  description     String?
+  propertyAddress String
+
+  // Scheduling
+  scheduledDate   DateTime
+  startTime       String   // e.g., "09:00"
+  endTime         String?  // e.g., "11:00"
+  duration        Int?     // Minutes
+
+  // Status
+  status          AppointmentStatus @default(SCHEDULED)
+  confirmedAt     DateTime?
+  cancelledAt     DateTime?
+  cancellationReason String?
+
+  // Reminders
+  reminderSent    Boolean @default(false)
+  reminderSentAt  DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([proId, scheduledDate])
+  @@index([serviceRequestId])
+}
+
+// Pro Reviews from Landlords/Tenants
+model ProReview {
+  id              String   @id @default(cuid())
+  proId           String
+  pro             ProProfile @relation(fields: [proId], references: [id], onDelete: Cascade)
+
+  // Linked to specific service request
+  serviceRequestId String  @unique
+  serviceRequest  ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  // Reviewer
+  reviewerType    ReviewerType
+  reviewerId      String
+  reviewerName    String
+
+  // Rating
+  overallRating   Int      // 1-5 stars
+  qualityRating   Int?     // 1-5
+  timelinessRating Int?    // 1-5
+  communicationRating Int? // 1-5
+  valueRating     Int?     // 1-5
+
+  // Review Content
+  title           String?
+  comment         String?
+  photos          String[] // Work result photos
+
+  // Visibility
+  isPublic        Boolean @default(true)
+
+  // Pro Response
+  proResponse     String?
+  proRespondedAt  DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([proId])
+}
+
+// ============================================================================
+// PRO-RELATED ENUMS
+// ============================================================================
+
+enum ServiceCategory {
+  PLUMBING
+  ELECTRICAL
+  HVAC
+  APPLIANCE_REPAIR
+  ROOFING
+  PAINTING
+  FLOORING
+  CARPENTRY
+  LANDSCAPING
+  PEST_CONTROL
+  CLEANING
+  LOCKSMITH
+  GENERAL_HANDYMAN
+  OTHER
+}
+
+enum ProConnectionStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
+
+enum InvitedBy {
+  LANDLORD
+  PRO
+}
+
+enum ServiceRequestStatus {
+  SUBMITTED       // Tenant/landlord submitted
+  REVIEWING       // Landlord reviewing SOW
+  PENDING_DISPATCH // Approved, waiting for pro assignment
+  DISPATCHED      // Assigned to pro
+  SCHEDULED       // Pro has scheduled appointment
+  IN_PROGRESS     // Pro is working on it
+  PENDING_APPROVAL // Pro completed, waiting for landlord approval
+  COMPLETED       // All done
+  CANCELLED
+}
+
+enum ServicePaymentStatus {
+  PENDING
+  INVOICED
+  PAID
+  REFUNDED
+  DISPUTED
+}
+
+enum JobComplexity {
+  SIMPLE
+  MODERATE
+  COMPLEX
+  REQUIRES_SPECIALIST
+}
+
+enum ChangeOrderStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+enum MessageSenderType {
+  TENANT
+  LANDLORD
+  PRO
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum ReviewerType {
+  LANDLORD
+  TENANT
 }
 
 // ============================================================================
@@ -202,6 +628,7 @@ model Property {
   currentTenancy  Tenant?
   photos          PropertyPhoto[]
   maintenanceRequests MaintenanceRequest[]
+  serviceRequests ServiceRequest[]
   rentPayments    RentPayment[]
   tenantApplications TenantApplication[]
   weatherData     WeatherData[]
@@ -438,6 +865,7 @@ enum UserRole {
   ADMIN
   LANDLORD
   TENANT
+  PRO
 }
 
 enum SubscriptionTier {
