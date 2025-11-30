@@ -156,25 +156,122 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* Pets & Occupants */}
-      <section className="border rounded-lg p-4 space-y-2">
-        <h2 className="text-lg font-semibold">Pets & Additional Occupants</h2>
-        <div className="grid md:grid-cols-2 gap-2 text-sm">
-          <p>
-            <span className="font-medium">Has Pets:</span>{" "}
-            {application.hasPets ? "Yes" : "No"}
-          </p>
-          {application.hasPets && application.petDetails && (
-            <p className="md:col-span-2">
-              <span className="font-medium">Pet Details:</span>{" "}
-              {JSON.stringify(application.petDetails)}
-            </p>
+      {/* Additional Occupants */}
+      <section className="border rounded-lg p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Additional Occupants</h2>
+          {application.additionalOccupants && Array.isArray(application.additionalOccupants) && (
+            <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded">
+              {(application.additionalOccupants as any[]).length} occupant(s)
+            </span>
           )}
-          <p className="md:col-span-2">
-            <span className="font-medium">Additional Occupants:</span>{" "}
-            {application.additionalOccupants ? JSON.stringify(application.additionalOccupants) : "None"}
-          </p>
         </div>
+        
+        {application.additionalOccupants && Array.isArray(application.additionalOccupants) && (application.additionalOccupants as any[]).length > 0 ? (
+          <div className="space-y-3">
+            {(application.additionalOccupants as any[]).map((occupant: any, index: number) => {
+              // Calculate age
+              let age = '';
+              let isOver18 = false;
+              if (occupant.dateOfBirth) {
+                const birthDate = new Date(occupant.dateOfBirth);
+                const today = new Date();
+                const ageYears = today.getFullYear() - birthDate.getFullYear();
+                age = `${ageYears} years old`;
+                isOver18 = ageYears >= 18;
+              }
+              
+              return (
+                <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {occupant.firstName} {occupant.lastName}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {occupant.relationship === 'Other' ? occupant.otherRelationship : occupant.relationship}
+                        {age && ` • ${age}`}
+                      </p>
+                      {occupant.dateOfBirth && (
+                        <p className="text-xs text-gray-500">DOB: {formatDate(new Date(occupant.dateOfBirth))}</p>
+                      )}
+                    </div>
+                    {isOver18 && (
+                      <span className="bg-amber-100 text-amber-800 text-xs font-medium px-2 py-1 rounded flex items-center gap-1">
+                        ⚠️ 18+ (Background check required)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
+              <p className="text-sm text-amber-800">
+                <strong>Lease Note:</strong> All occupants listed above will be named on the lease. 
+                Occupants 18 years or older must submit a separate application and pass a background check.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">No additional occupants listed</p>
+        )}
+      </section>
+
+      {/* Pets */}
+      <section className="border rounded-lg p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Pets</h2>
+          {application.petDetails && Array.isArray(application.petDetails) && (
+            <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded">
+              {(application.petDetails as any[]).length} pet(s)
+            </span>
+          )}
+        </div>
+
+        {application.hasPets ? (
+          application.petDetails && Array.isArray(application.petDetails) && (application.petDetails as any[]).length > 0 ? (
+            <div className="space-y-3">
+              {(application.petDetails as any[]).map((pet: any, index: number) => (
+                <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {pet.name}
+                        <span className="ml-2 text-sm font-normal text-gray-600">
+                          ({pet.type === 'Other' ? pet.otherType : pet.type})
+                        </span>
+                      </p>
+                      <div className="text-sm text-gray-600 mt-1">
+                        {pet.breed && <span>Breed: {pet.breed} • </span>}
+                        <span>Weight: {pet.weight} lbs</span>
+                        {pet.color && <span> • Color: {pet.color}</span>}
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium px-2 py-1 rounded ${
+                      pet.type === 'Dog' ? 'bg-blue-100 text-blue-800' :
+                      pet.type === 'Cat' ? 'bg-purple-100 text-purple-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {pet.type === 'Dog' ? '🐕 Dog' : pet.type === 'Cat' ? '🐈 Cat' : '🐾 Other'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                <p className="text-sm text-blue-800">
+                  <strong>Lease Note:</strong> Pet rent and pet deposit may apply per property policy. 
+                  All pets listed above will be documented in the lease agreement.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Pet details not provided</p>
+          )
+        ) : (
+          <p className="text-sm text-gray-500">No pets</p>
+        )}
       </section>
 
       {/* Second Applicant */}

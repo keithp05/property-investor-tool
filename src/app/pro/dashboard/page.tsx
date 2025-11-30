@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -52,7 +52,7 @@ const mockStats = {
   totalReviews: 47,
 };
 
-export default function ProDashboardPage() {
+function DashboardContent() {
   const searchParams = useSearchParams();
   const isNewRegistration = searchParams.get('registered') === 'true';
   const [showWelcome, setShowWelcome] = useState(isNewRegistration);

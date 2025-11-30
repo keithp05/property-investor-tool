@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { FileText, Loader2, CheckCircle, Home, Briefcase, Users, PawPrint, CreditCard, Upload } from 'lucide-react';
+import { FileText, Loader2, CheckCircle, Home, Briefcase, Users, PawPrint, CreditCard, Upload, Plus, Trash2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Dynamically import Stripe component (client-side only)
@@ -29,6 +29,62 @@ interface ApplicationData {
   applicationFee: number;
 }
 
+// Occupant structure for lease
+interface Occupant {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  relationship: 'Child' | 'Spouse' | 'Family' | 'Other' | '';
+  otherRelationship?: string;
+}
+
+// Pet structure for lease
+interface Pet {
+  type: 'Dog' | 'Cat' | 'Other' | '';
+  otherType?: string;
+  breed?: string;
+  name: string;
+  weight: string;
+  color?: string;
+}
+
+// Common dog breeds for dropdown
+const DOG_BREEDS = [
+  'Labrador Retriever',
+  'German Shepherd',
+  'Golden Retriever',
+  'French Bulldog',
+  'Bulldog',
+  'Poodle',
+  'Beagle',
+  'Rottweiler',
+  'German Shorthaired Pointer',
+  'Dachshund',
+  'Pembroke Welsh Corgi',
+  'Australian Shepherd',
+  'Yorkshire Terrier',
+  'Boxer',
+  'Cavalier King Charles Spaniel',
+  'Doberman Pinscher',
+  'Great Dane',
+  'Miniature Schnauzer',
+  'Siberian Husky',
+  'Shih Tzu',
+  'Boston Terrier',
+  'Bernese Mountain Dog',
+  'Pomeranian',
+  'Havanese',
+  'Shetland Sheepdog',
+  'Brittany',
+  'English Springer Spaniel',
+  'Cocker Spaniel',
+  'Border Collie',
+  'Chihuahua',
+  'Pit Bull / American Staffordshire Terrier',
+  'Mixed Breed',
+  'Other (please specify in name field)',
+];
+
 export default function TenantApplicationPage() {
   const params = useParams();
   const router = useRouter();
@@ -39,6 +95,12 @@ export default function TenantApplicationPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [applicationData, setApplicationData] = useState<ApplicationData | null>(null);
   const [error, setError] = useState('');
+
+  // Occupants state
+  const [occupants, setOccupants] = useState<Occupant[]>([]);
+  
+  // Pets state
+  const [pets, setPets] = useState<Pet[]>([]);
 
   const [formData, setFormData] = useState({
     // Personal Info
@@ -92,10 +154,9 @@ export default function TenantApplicationPage() {
 
     // Pets
     hasPets: false,
-    petDetails: '',
 
     // Additional Occupants
-    additionalOccupants: '',
+    hasAdditionalOccupants: false,
 
     // Second Applicant
     hasSecondApplicant: false,
@@ -109,6 +170,40 @@ export default function TenantApplicationPage() {
     applicationFeePaid: false,
     stripePaymentIntentId: '',
   });
+
+  // Add new occupant
+  const addOccupant = () => {
+    setOccupants([...occupants, { firstName: '', lastName: '', dateOfBirth: '', relationship: '' }]);
+  };
+
+  // Remove occupant
+  const removeOccupant = (index: number) => {
+    setOccupants(occupants.filter((_, i) => i !== index));
+  };
+
+  // Update occupant
+  const updateOccupant = (index: number, field: keyof Occupant, value: string) => {
+    const updated = [...occupants];
+    updated[index] = { ...updated[index], [field]: value };
+    setOccupants(updated);
+  };
+
+  // Add new pet
+  const addPet = () => {
+    setPets([...pets, { type: '', name: '', weight: '', breed: '' }]);
+  };
+
+  // Remove pet
+  const removePet = (index: number) => {
+    setPets(pets.filter((_, i) => i !== index));
+  };
+
+  // Update pet
+  const updatePet = (index: number, field: keyof Pet, value: string) => {
+    const updated = [...pets];
+    updated[index] = { ...updated[index], [field]: value };
+    setPets(updated);
+  };
 
   // Fetch application details
   useEffect(() => {
@@ -149,10 +244,19 @@ export default function TenantApplicationPage() {
     setSubmitting(true);
 
     try {
+      // Prepare submission data with structured occupants and pets
+      const submissionData = {
+        ...formData,
+        // Convert occupants array to JSON for storage
+        additionalOccupants: occupants.length > 0 ? occupants : null,
+        // Convert pets array to JSON for storage
+        petDetails: pets.length > 0 ? pets : null,
+      };
+
       const response = await fetch(`/api/applications/${link}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(submissionData),
       });
 
       const data = await response.json();
@@ -615,21 +719,133 @@ export default function TenantApplicationPage() {
             </div>
           )}
 
-          {/* Step 7: Additional Occupants */}
+          {/* Step 7: Additional Occupants - STRUCTURED */}
           {currentStep === 7 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                 <Users className="h-6 w-6 text-indigo-600" />
                 Additional Occupants
               </h2>
-              <p className="text-sm text-gray-600">List any additional people who will be living in the property (children, roommates, etc.)</p>
-              <textarea
-                placeholder="Example: John Doe (Roommate, Age 25), Jane Doe (Daughter, Age 5)"
-                value={formData.additionalOccupants}
-                onChange={(e) => setFormData({ ...formData, additionalOccupants: e.target.value })}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
+              <p className="text-sm text-gray-600">
+                List all people who will be living in the property besides yourself. 
+                <span className="font-medium text-amber-700"> Note: All occupants over 18 years of age are required to submit a separate application and pass a background check.</span>
+              </p>
+
+              <label className="flex items-center gap-2 mb-4">
+                <input
+                  type="checkbox"
+                  checked={formData.hasAdditionalOccupants}
+                  onChange={(e) => {
+                    setFormData({ ...formData, hasAdditionalOccupants: e.target.checked });
+                    if (!e.target.checked) {
+                      setOccupants([]);
+                    }
+                  }}
+                  className="rounded text-indigo-600"
+                />
+                <span className="text-gray-700">I will have additional occupants</span>
+              </label>
+
+              {formData.hasAdditionalOccupants && (
+                <div className="space-y-4">
+                  {occupants.map((occupant, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-medium text-gray-900">Occupant {index + 1}</h3>
+                        <button
+                          type="button"
+                          onClick={() => removeOccupant(index)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <input
+                          type="text"
+                          placeholder="First Name *"
+                          value={occupant.firstName}
+                          onChange={(e) => updateOccupant(index, 'firstName', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Last Name *"
+                          value={occupant.lastName}
+                          onChange={(e) => updateOccupant(index, 'lastName', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Date of Birth *</label>
+                          <input
+                            type="date"
+                            value={occupant.dateOfBirth}
+                            onChange={(e) => updateOccupant(index, 'dateOfBirth', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Relationship *</label>
+                          <select
+                            value={occupant.relationship}
+                            onChange={(e) => updateOccupant(index, 'relationship', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">Select relationship...</option>
+                            <option value="Spouse">Spouse</option>
+                            <option value="Child">Child</option>
+                            <option value="Family">Family Member</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {occupant.relationship === 'Other' && (
+                        <input
+                          type="text"
+                          placeholder="Please specify relationship"
+                          value={occupant.otherRelationship || ''}
+                          onChange={(e) => updateOccupant(index, 'otherRelationship', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        />
+                      )}
+
+                      {/* Age warning for 18+ */}
+                      {occupant.dateOfBirth && (() => {
+                        const birthDate = new Date(occupant.dateOfBirth);
+                        const today = new Date();
+                        const age = today.getFullYear() - birthDate.getFullYear();
+                        const isOver18 = age > 18 || (age === 18 && today >= new Date(birthDate.setFullYear(birthDate.getFullYear() + 18)));
+                        if (isOver18) {
+                          return (
+                            <div className="bg-amber-50 border border-amber-200 rounded p-2 text-sm text-amber-800">
+                              ⚠️ This occupant is 18 or older and will need to submit a separate application and background check.
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addOccupant}
+                    className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 w-full justify-center"
+                  >
+                    <Plus className="h-5 w-5" />
+                    Add Occupant
+                  </button>
+                </div>
+              )}
+
+              {!formData.hasAdditionalOccupants && (
+                <p className="text-gray-500 py-4 text-center">No additional occupants</p>
+              )}
             </div>
           )}
 
@@ -637,6 +853,9 @@ export default function TenantApplicationPage() {
           {currentStep === 8 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900">Second Applicant</h2>
+              <p className="text-sm text-gray-600">
+                If you have a spouse or partner who will be on the lease and shares financial responsibility, they should complete a separate application.
+              </p>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -644,44 +863,171 @@ export default function TenantApplicationPage() {
                   onChange={(e) => setFormData({ ...formData, hasSecondApplicant: e.target.checked })}
                   className="rounded text-indigo-600"
                 />
-                <span className="text-gray-700">Is there a second applicant (spouse, partner)?</span>
+                <span className="text-gray-700">There will be a second applicant (spouse/partner on lease)</span>
               </label>
               {formData.hasSecondApplicant && (
-                <textarea
-                  placeholder="Second Applicant Info (Name, DOB, SSN, Employment Details)"
-                  value={formData.secondApplicantInfo}
-                  onChange={(e) => setFormData({ ...formData, secondApplicantInfo: e.target.value })}
-                  rows={6}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    The second applicant will need to complete their own application using a separate application link. Please contact the landlord to request an additional application link.
+                  </p>
+                </div>
               )}
             </div>
           )}
 
-          {/* Step 9: Pets */}
+          {/* Step 9: Pets - STRUCTURED */}
           {currentStep === 9 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                 <PawPrint className="h-6 w-6 text-indigo-600" />
                 Pets
               </h2>
-              <label className="flex items-center gap-2">
+              <p className="text-sm text-gray-600">
+                Please provide details for each pet. Pet rent may apply based on property policy.
+              </p>
+
+              <label className="flex items-center gap-2 mb-4">
                 <input
                   type="checkbox"
                   checked={formData.hasPets}
-                  onChange={(e) => setFormData({ ...formData, hasPets: e.target.checked })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, hasPets: e.target.checked });
+                    if (!e.target.checked) {
+                      setPets([]);
+                    }
+                  }}
                   className="rounded text-indigo-600"
                 />
-                <span className="text-gray-700">Do you have any pets?</span>
+                <span className="text-gray-700">I have pets</span>
               </label>
+
               {formData.hasPets && (
-                <textarea
-                  placeholder="Pet Details (Type, Breed, Weight, Age, Name)"
-                  value={formData.petDetails}
-                  onChange={(e) => setFormData({ ...formData, petDetails: e.target.value })}
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
+                <div className="space-y-4">
+                  {pets.map((pet, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-medium text-gray-900">Pet {index + 1}</h3>
+                        <button
+                          type="button"
+                          onClick={() => removePet(index)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Pet Type *</label>
+                          <select
+                            value={pet.type}
+                            onChange={(e) => {
+                              updatePet(index, 'type', e.target.value);
+                              // Clear breed if not a dog
+                              if (e.target.value !== 'Dog') {
+                                updatePet(index, 'breed', '');
+                              }
+                            }}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">Select type...</option>
+                            <option value="Dog">Dog</option>
+                            <option value="Cat">Cat</option>
+                            <option value="Other">Other (please specify)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Pet Name *</label>
+                          <input
+                            type="text"
+                            placeholder="Pet's name"
+                            value={pet.name}
+                            onChange={(e) => updatePet(index, 'name', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      {pet.type === 'Other' && (
+                        <input
+                          type="text"
+                          placeholder="Please specify pet type (e.g., Bird, Fish, Rabbit)"
+                          value={pet.otherType || ''}
+                          onChange={(e) => updatePet(index, 'otherType', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        />
+                      )}
+
+                      {pet.type === 'Dog' && (
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Breed *</label>
+                          <select
+                            value={pet.breed || ''}
+                            onChange={(e) => updatePet(index, 'breed', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">Select breed...</option>
+                            {DOG_BREEDS.map((breed) => (
+                              <option key={breed} value={breed}>{breed}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {pet.type === 'Cat' && (
+                        <input
+                          type="text"
+                          placeholder="Breed (optional, e.g., Tabby, Siamese, Mixed)"
+                          value={pet.breed || ''}
+                          onChange={(e) => updatePet(index, 'breed', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        />
+                      )}
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Weight (lbs) *</label>
+                          <input
+                            type="number"
+                            placeholder="Weight in pounds"
+                            value={pet.weight}
+                            onChange={(e) => updatePet(index, 'weight', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Color/Markings</label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Black, White with spots"
+                            value={pet.color || ''}
+                            onChange={(e) => updatePet(index, 'color', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addPet}
+                    className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 w-full justify-center"
+                  >
+                    <Plus className="h-5 w-5" />
+                    Add Pet
+                  </button>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Pet Policy:</strong> Pet rent and deposits may apply. Some breed restrictions may be enforced by insurance requirements. The landlord will review your pet information as part of the application.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!formData.hasPets && (
+                <p className="text-gray-500 py-4 text-center">No pets</p>
               )}
             </div>
           )}
@@ -857,10 +1203,36 @@ export default function TenantApplicationPage() {
                   <h3 className="font-semibold text-gray-900">Current Address</h3>
                   <p className="text-sm text-gray-600">{formData.currentAddress}, {formData.currentCity}, {formData.currentState} {formData.currentZip}</p>
                 </div>
+                
+                {/* Occupants Summary */}
+                {occupants.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Additional Occupants ({occupants.length})</h3>
+                    {occupants.map((occ, i) => (
+                      <p key={i} className="text-sm text-gray-600">
+                        {occ.firstName} {occ.lastName} - {occ.relationship === 'Other' ? occ.otherRelationship : occ.relationship}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pets Summary */}
+                {pets.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Pets ({pets.length})</h3>
+                    {pets.map((pet, i) => (
+                      <p key={i} className="text-sm text-gray-600">
+                        {pet.name} - {pet.type === 'Other' ? pet.otherType : pet.type}
+                        {pet.breed && ` (${pet.breed})`}, {pet.weight} lbs
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <p className="text-sm text-amber-900">
-                  ⚠️ By submitting this application, you authorize the landlord to conduct credit and background checks.
+                  ⚠️ By submitting this application, you authorize the landlord to conduct credit and background checks. 
+                  You acknowledge that all occupants 18 years of age or older must submit a separate application and pass a background check before being allowed to reside at the property.
                 </p>
               </div>
             </div>
