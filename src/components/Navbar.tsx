@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User } from 'lucide-react';
+import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User, Wrench } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Navbar() {
@@ -24,6 +24,7 @@ export default function Navbar() {
     { name: 'My Properties', href: '/properties/my-properties', icon: Home },
     { name: 'Lease Generator', href: '/lease/generate', icon: FileText },
     { name: 'Tenants', href: '/tenants', icon: Users },
+    { name: 'Preferred Pros', href: '/landlord/pros', icon: Wrench },
   ];
 
   const tenantNavigation = [
