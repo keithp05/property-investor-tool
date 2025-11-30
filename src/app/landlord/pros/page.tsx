@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Wrench,
@@ -63,6 +63,7 @@ const SERVICE_CATEGORIES = [
 
 export default function LandlordProsPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [pros, setPros] = useState<PreferredPro[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -76,10 +77,14 @@ export default function LandlordProsPage() {
   const [filterCategory, setFilterCategory] = useState('');
 
   useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin');
+      return;
+    }
     if (status === 'authenticated') {
       fetchPros();
     }
-  }, [status]);
+  }, [status, router]);
 
   const fetchPros = async () => {
     try {
@@ -148,10 +153,6 @@ export default function LandlordProsPage() {
         <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
       </div>
     );
-  }
-
-  if (status === 'unauthenticated') {
-    redirect('/auth/signin');
   }
 
   // Filter pros

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Wrench,
@@ -63,16 +63,21 @@ interface ProProfile {
 
 export default function ProDashboardPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [profile, setProfile] = useState<ProProfile | null>(null);
   const [services, setServices] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'scheduled' | 'completed'>('active');
 
   useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin');
+      return;
+    }
     if (status === 'authenticated') {
       fetchData();
     }
-  }, [status]);
+  }, [status, router]);
 
   const fetchData = async () => {
     try {
@@ -102,10 +107,6 @@ export default function ProDashboardPage() {
         <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
       </div>
     );
-  }
-
-  if (status === 'unauthenticated') {
-    redirect('/auth/signin');
   }
 
   // Filter services by tab
