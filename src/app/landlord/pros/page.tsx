@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
   Wrench,
   Plus,
-  Search,
   Star,
   Phone,
   Mail,
@@ -13,14 +14,36 @@ import {
   CheckCircle,
   Clock,
   X,
-  Send,
-  Users,
-  Filter,
-  ChevronRight,
+  Search,
+  UserPlus,
   Loader2,
-  Building2,
-  DollarSign,
+  ExternalLink,
 } from 'lucide-react';
+
+interface PreferredPro {
+  id: string;
+  status: string;
+  isPrimary: boolean;
+  primaryForCategory: string | null;
+  invitedAt: string;
+  acceptedAt: string | null;
+  pro: {
+    id: string;
+    businessName: string;
+    phone: string;
+    city: string | null;
+    state: string | null;
+    serviceCategories: string[];
+    averageRating: number;
+    totalReviews: number;
+    totalJobsCompleted: number;
+    hourlyRate: number | null;
+    user: {
+      name: string;
+      email: string;
+    };
+  };
+}
 
 const SERVICE_CATEGORIES = [
   { value: 'PLUMBING', label: 'Plumbing' },
@@ -38,102 +61,88 @@ const SERVICE_CATEGORIES = [
   { value: 'GENERAL_HANDYMAN', label: 'General Handyman' },
 ];
 
-// Mock data
-const MOCK_PREFERRED_PROS = [
-  {
-    id: '1',
-    businessName: 'Quick Fix Plumbing',
-    name: 'Mike Johnson',
-    phone: '(512) 555-1234',
-    email: 'mike@quickfix.com',
-    serviceCategories: ['PLUMBING'],
-    hourlyRate: 75,
-    rating: 4.9,
-    totalReviews: 32,
-    status: 'ACCEPTED',
-    isPrimary: true,
-    primaryForCategory: 'PLUMBING',
-    totalJobsCompleted: 15,
-  },
-  {
-    id: '2',
-    businessName: 'Sparky Electric Co.',
-    name: 'Sarah Chen',
-    phone: '(512) 555-5678',
-    email: 'sarah@sparkyelectric.com',
-    serviceCategories: ['ELECTRICAL'],
-    hourlyRate: 85,
-    rating: 4.7,
-    totalReviews: 18,
-    status: 'ACCEPTED',
-    isPrimary: true,
-    primaryForCategory: 'ELECTRICAL',
-    totalJobsCompleted: 8,
-  },
-  {
-    id: '3',
-    businessName: 'Cool Breeze HVAC',
-    name: 'James Wilson',
-    phone: '(512) 555-9012',
-    email: 'james@coolbreeze.com',
-    serviceCategories: ['HVAC'],
-    hourlyRate: 95,
-    rating: 4.8,
-    totalReviews: 24,
-    status: 'PENDING',
-    isPrimary: false,
-    totalJobsCompleted: 0,
-  },
-];
-
-const MOCK_MARKETPLACE_PROS = [
-  {
-    id: '4',
-    businessName: 'Handy Helpers',
-    name: 'Tom Brown',
-    serviceCategories: ['GENERAL_HANDYMAN', 'PAINTING', 'CARPENTRY'],
-    hourlyRate: 55,
-    rating: 4.6,
-    totalReviews: 42,
-    city: 'Austin',
-    state: 'TX',
-    bio: 'Over 15 years of experience in general home repairs and improvements.',
-  },
-  {
-    id: '5',
-    businessName: 'Green Lawn Care',
-    name: 'Maria Garcia',
-    serviceCategories: ['LANDSCAPING'],
-    hourlyRate: 45,
-    rating: 4.9,
-    totalReviews: 67,
-    city: 'Austin',
-    state: 'TX',
-    bio: 'Full-service landscaping including lawn care, tree trimming, and irrigation.',
-  },
-];
-
 export default function LandlordProsPage() {
+  const { data: session, status } = useSession();
+  const [pros, setPros] = useState<PreferredPro[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'preferred' | 'marketplace' | 'invite'>('preferred');
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteData, setInviteData] = useState({ email: '', phone: '', message: '' });
-  const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [inviteData, setInviteData] = useState({
+    email: '',
+    phone: '',
+    name: '',
+  });
+  const [inviting, setInviting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 500);
-  }, []);
+    if (status === 'authenticated') {
+      fetchPros();
+    }
+  }, [status]);
 
-  const handleInvite = async () => {
-    // TODO: Implement invite API
-    console.log('Inviting pro:', inviteData);
-    setShowInviteModal(false);
-    setInviteData({ email: '', phone: '', message: '' });
-    alert('Invitation sent!');
+  const fetchPros = async () => {
+    try {
+      const res = await fetch('/api/landlord/pros');
+      const data = await res.json();
+      if (data.success) {
+        setPros(data.pros);
+      }
+    } catch (error) {
+      console.error('Failed to fetch pros:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) {
+  const handleInvite = async () => {
+    if (!inviteData.email && !inviteData.phone) {
+      alert('Please provide an email or phone number');
+      return;
+    }
+
+    setInviting(true);
+    try {
+      const res = await fetch('/api/landlord/pros/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inviteData),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Invitation sent!');
+        setShowInviteModal(false);
+        setInviteData({ email: '', phone: '', name: '' });
+        fetchPros();
+      } else {
+        alert(data.error || 'Failed to send invitation');
+      }
+    } catch (error) {
+      alert('Failed to send invitation');
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleRemove = async (proConnectionId: string) => {
+    if (!confirm('Are you sure you want to remove this pro from your preferred list?')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/landlord/pros/${proConnectionId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchPros();
+      }
+    } catch (error) {
+      console.error('Failed to remove pro:', error);
+    }
+  };
+
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
@@ -141,298 +150,279 @@ export default function LandlordProsPage() {
     );
   }
 
+  if (status === 'unauthenticated') {
+    redirect('/auth/signin');
+  }
+
+  // Filter pros
+  const filteredPros = pros.filter((p) => {
+    const matchesSearch =
+      !searchTerm ||
+      p.pro.businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.pro.user.name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory =
+      !filterCategory || p.pro.serviceCategories.includes(filterCategory);
+
+    return matchesSearch && matchesCategory;
+  });
+
+  // Group by status
+  const acceptedPros = filteredPros.filter((p) => p.status === 'ACCEPTED');
+  const pendingPros = filteredPros.filter((p) => p.status === 'PENDING');
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Service Professionals</h1>
-            <p className="text-sm text-gray-500">Manage your preferred pros and find new ones</p>
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Preferred Pros</h1>
+              <p className="text-sm text-gray-500">Manage your service professional network</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/landlord/pros/find"
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <Search className="h-4 w-4" />
+                Find Pros
+              </Link>
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+              >
+                <UserPlus className="h-4 w-4" />
+                Invite Pro
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-          >
-            <Plus className="h-5 w-5" />
-            Invite a Pro
-          </button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-indigo-100 p-3 rounded-full">
-                <Users className="h-6 w-6 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{MOCK_PREFERRED_PROS.length}</p>
-                <p className="text-sm text-gray-500">Preferred Pros</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-green-100 p-3 rounded-full">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {MOCK_PREFERRED_PROS.filter(p => p.status === 'ACCEPTED').length}
-                </p>
-                <p className="text-sm text-gray-500">Active Connections</p>
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search pros..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
             </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-amber-100 p-3 rounded-full">
-                <Clock className="h-6 w-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {MOCK_PREFERRED_PROS.filter(p => p.status === 'PENDING').length}
-                </p>
-                <p className="text-sm text-gray-500">Pending Invites</p>
-              </div>
-            </div>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">All Categories</option>
+              {SERVICE_CATEGORIES.map((cat) => (
+                <option key={cat.value} value={cat.value}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b">
-          <button
-            onClick={() => setActiveTab('preferred')}
-            className={`px-4 py-2 font-medium border-b-2 transition ${
-              activeTab === 'preferred'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            My Preferred Pros
-          </button>
-          <button
-            onClick={() => setActiveTab('marketplace')}
-            className={`px-4 py-2 font-medium border-b-2 transition ${
-              activeTab === 'marketplace'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Find Pros
-          </button>
-        </div>
-
-        {/* Preferred Pros Tab */}
-        {activeTab === 'preferred' && (
-          <div className="space-y-4">
-            {MOCK_PREFERRED_PROS.map((pro) => (
-              <div key={pro.id} className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className="bg-indigo-100 p-3 rounded-full">
-                      <Wrench className="h-6 w-6 text-indigo-600" />
-                    </div>
+        {/* Pending Invitations */}
+        {pendingPros.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Clock className="h-5 w-5 text-yellow-600" />
+              Pending Invitations ({pendingPros.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingPros.map((connection) => (
+                <div
+                  key={connection.id}
+                  className="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500"
+                >
+                  <div className="flex justify-between items-start">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900">{pro.businessName}</h3>
-                        {pro.isPrimary && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                            Primary for {pro.primaryForCategory}
-                          </span>
-                        )}
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          pro.status === 'ACCEPTED' ? 'bg-green-100 text-green-700' :
-                          pro.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {pro.status}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600">{pro.name}</p>
-                      
-                      <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                          {pro.rating} ({pro.totalReviews} reviews)
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <DollarSign className="h-4 w-4" />
-                          ${pro.hourlyRate}/hr
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <CheckCircle className="h-4 w-4" />
-                          {pro.totalJobsCompleted} jobs completed
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-4 mt-2">
-                        <a href={`tel:${pro.phone}`} className="text-sm text-indigo-600 hover:underline flex items-center gap-1">
-                          <Phone className="h-4 w-4" />
-                          {pro.phone}
-                        </a>
-                        <a href={`mailto:${pro.email}`} className="text-sm text-indigo-600 hover:underline flex items-center gap-1">
-                          <Mail className="h-4 w-4" />
-                          {pro.email}
-                        </a>
-                      </div>
-
-                      <div className="flex gap-2 mt-3">
-                        {pro.serviceCategories.map((cat) => (
-                          <span key={cat} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                            {SERVICE_CATEGORIES.find(c => c.value === cat)?.label || cat}
-                          </span>
-                        ))}
-                      </div>
+                      <h3 className="font-semibold text-gray-900">
+                        {connection.pro.businessName}
+                      </h3>
+                      <p className="text-sm text-gray-500">{connection.pro.user.name}</p>
                     </div>
+                    <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      Pending
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Invited {new Date(connection.invitedAt).toLocaleDateString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Accepted Pros */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            Your Pros ({acceptedPros.length})
+          </h2>
+
+          {acceptedPros.length === 0 ? (
+            <div className="bg-white rounded-lg shadow p-12 text-center">
+              <Wrench className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Preferred Pros Yet</h3>
+              <p className="text-gray-500 mb-4">
+                Invite service professionals to build your network
+              </p>
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                Invite Your First Pro
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {acceptedPros.map((connection) => (
+                <div key={connection.id} className="bg-white rounded-lg shadow overflow-hidden">
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {connection.pro.businessName}
+                        </h3>
+                        <p className="text-sm text-gray-500">{connection.pro.user.name}</p>
+                      </div>
+                      {connection.isPrimary && (
+                        <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded">
+                          Primary
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Rating */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-1">
+                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                        <span className="font-medium">
+                          {connection.pro.averageRating.toFixed(1)}
+                        </span>
+                      </div>
+                      <span className="text-sm text-gray-500">
+                        ({connection.pro.totalReviews} reviews)
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        • {connection.pro.totalJobsCompleted} jobs
+                      </span>
+                    </div>
+
+                    {/* Services */}
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {connection.pro.serviceCategories.slice(0, 3).map((cat) => (
+                        <span
+                          key={cat}
+                          className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded"
+                        >
+                          {cat.replace('_', ' ')}
+                        </span>
+                      ))}
+                      {connection.pro.serviceCategories.length > 3 && (
+                        <span className="text-xs text-gray-500">
+                          +{connection.pro.serviceCategories.length - 3} more
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Contact */}
+                    <div className="space-y-1 text-sm text-gray-600 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        {connection.pro.phone}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        {connection.pro.user.email}
+                      </div>
+                      {connection.pro.city && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4" />
+                          {connection.pro.city}, {connection.pro.state}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Rate */}
+                    {connection.pro.hourlyRate && (
+                      <p className="text-sm font-medium text-gray-900">
+                        ${Number(connection.pro.hourlyRate).toFixed(0)}/hr
+                      </p>
+                    )}
                   </div>
 
-                  <div className="flex flex-col gap-2">
-                    {pro.status === 'ACCEPTED' && (
-                      <Link
-                        href={`/landlord/service-requests/new?proId=${pro.id}`}
-                        className="text-sm px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                      >
-                        Dispatch Job
-                      </Link>
-                    )}
+                  {/* Actions */}
+                  <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
                     <Link
-                      href={`/landlord/pros/${pro.id}`}
-                      className="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-center"
+                      href={`/landlord/pros/${connection.pro.id}`}
+                      className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
                     >
                       View Profile
+                      <ExternalLink className="h-3 w-3" />
                     </Link>
+                    <button
+                      onClick={() => handleRemove(connection.id)}
+                      className="text-sm text-red-600 hover:text-red-800"
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
-
-            {MOCK_PREFERRED_PROS.length === 0 && (
-              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-600">No preferred pros yet</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Invite pros or find them in the marketplace
-                </p>
-                <button
-                  onClick={() => setActiveTab('marketplace')}
-                  className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                >
-                  Browse Marketplace
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Marketplace Tab */}
-        {activeTab === 'marketplace' && (
-          <div className="space-y-4">
-            {/* Search & Filter */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <div className="flex gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by name, business, or specialty..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">All Categories</option>
-                  {SERVICE_CATEGORIES.map((cat) => (
-                    <option key={cat.value} value={cat.value}>{cat.label}</option>
-                  ))}
-                </select>
-              </div>
+              ))}
             </div>
-
-            {/* Pro Cards */}
-            {MOCK_MARKETPLACE_PROS.map((pro) => (
-              <div key={pro.id} className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className="bg-gray-100 p-3 rounded-full">
-                      <Wrench className="h-6 w-6 text-gray-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{pro.businessName}</h3>
-                      <p className="text-sm text-gray-600">{pro.name}</p>
-                      
-                      <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                          {pro.rating} ({pro.totalReviews} reviews)
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <DollarSign className="h-4 w-4" />
-                          ${pro.hourlyRate}/hr
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          {pro.city}, {pro.state}
-                        </span>
-                      </div>
-
-                      <p className="text-sm text-gray-600 mt-2">{pro.bio}</p>
-
-                      <div className="flex gap-2 mt-3">
-                        {pro.serviceCategories.map((cat) => (
-                          <span key={cat} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                            {SERVICE_CATEGORIES.find(c => c.value === cat)?.label || cat}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      // TODO: Add to preferred list
-                      alert(`Adding ${pro.businessName} to your preferred list`);
-                    }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm whitespace-nowrap"
-                  >
-                    Add to Preferred
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+          )}
+        </div>
       </main>
 
       {/* Invite Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Invite a Service Professional</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Invite a Pro</h2>
               <button
                 onClick={() => setShowInviteModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <X className="h-6 w-6" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <p className="text-sm text-gray-600 mb-4">
-              Send an invitation to a service professional you know. They'll receive an email or SMS with instructions to join.
+              Send an invitation to a service professional. They'll receive an email or SMS with a link to join your network.
             </p>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Pro's Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="John's Plumbing"
+                  value={inviteData.name}
+                  onChange={(e) => setInviteData({ ...inviteData, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email Address
+                </label>
                 <input
                   type="email"
                   placeholder="pro@example.com"
@@ -442,10 +432,10 @@ export default function LandlordProsPage() {
                 />
               </div>
 
-              <div className="text-center text-sm text-gray-500">or</div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number (for SMS)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone Number (for SMS)
+                </label>
                 <input
                   type="tel"
                   placeholder="(555) 123-4567"
@@ -454,33 +444,31 @@ export default function LandlordProsPage() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Personal Message (optional)</label>
-                <textarea
-                  placeholder="Hi! I'd like to add you to my preferred service professionals..."
-                  value={inviteData.message}
-                  onChange={(e) => setInviteData({ ...inviteData, message: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowInviteModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleInvite}
-                disabled={!inviteData.email && !inviteData.phone}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 flex items-center justify-center gap-2"
+                disabled={inviting}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 flex items-center gap-2"
               >
-                <Send className="h-4 w-4" />
-                Send Invite
+                {inviting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Send Invitation
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wrench, Loader2, CheckCircle, Building2 } from 'lucide-react';
 import Link from 'next/link';
+import { Wrench, Loader2, CheckCircle, Building2 } from 'lucide-react';
 
 const SERVICE_CATEGORIES = [
   { value: 'PLUMBING', label: 'Plumbing' },
   { value: 'ELECTRICAL', label: 'Electrical' },
-  { value: 'HVAC', label: 'HVAC' },
+  { value: 'HVAC', label: 'HVAC / Air Conditioning' },
   { value: 'APPLIANCE_REPAIR', label: 'Appliance Repair' },
   { value: 'ROOFING', label: 'Roofing' },
   { value: 'PAINTING', label: 'Painting' },
@@ -24,9 +24,10 @@ const SERVICE_CATEGORIES = [
 
 export default function ProRegisterPage() {
   const router = useRouter();
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState(1);
+  const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
     // Account
@@ -34,8 +35,7 @@ export default function ProRegisterPage() {
     password: '',
     confirmPassword: '',
     name: '',
-
-    // Business Info
+    // Business
     businessName: '',
     phone: '',
     businessAddress: '',
@@ -43,27 +43,19 @@ export default function ProRegisterPage() {
     state: '',
     zipCode: '',
     serviceRadius: '25',
-
     // Services
     serviceCategories: [] as string[],
     specialties: '',
-
     // Rates
     hourlyRate: '',
     callOutFee: '',
     emergencyRate: '',
     acceptsEmergency: false,
-
-    // Credentials
-    licenseNumber: '',
-    insuranceProvider: '',
-    insurancePolicyNumber: '',
-
-    // Bio
+    // Profile
     bio: '',
   });
 
-  const toggleCategory = (category: string) => {
+  const handleServiceToggle = (category: string) => {
     setFormData(prev => ({
       ...prev,
       serviceCategories: prev.serviceCategories.includes(category)
@@ -76,7 +68,7 @@ export default function ProRegisterPage() {
     setLoading(true);
     setError('');
 
-    // Validation
+    // Validate
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
@@ -99,23 +91,34 @@ export default function ProRegisterPage() {
       const data = await response.json();
 
       if (data.success) {
-        router.push('/pro/dashboard?welcome=true');
+        setSuccess(true);
+        setTimeout(() => {
+          router.push('/auth/signin');
+        }, 2000);
       } else {
         setError(data.error || 'Registration failed');
       }
     } catch (err) {
-      console.error('Registration error:', err);
-      setError('Failed to register. Please try again.');
+      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const nextStep = () => setStep(prev => Math.min(prev + 1, 4));
-  const prevStep = () => setStep(prev => Math.max(prev - 1, 1));
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Registration Successful!</h1>
+          <p className="text-gray-600">Redirecting to sign in...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-2xl mx-auto px-4">
         {/* Header */}
         <div className="text-center mb-8">
@@ -125,42 +128,33 @@ export default function ProRegisterPage() {
             </div>
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Join as a Service Professional</h1>
-          <p className="text-gray-600 mt-2">
-            Connect with landlords and grow your property service business
-          </p>
+          <p className="text-gray-600 mt-2">Connect with landlords and grow your business</p>
         </div>
 
         {/* Progress */}
-        <div className="flex items-center justify-center mb-8">
+        <div className="flex justify-center gap-2 mb-8">
           {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-                s <= step ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'
-              }`}>
-                {s < step ? <CheckCircle className="h-5 w-5" /> : s}
-              </div>
-              {s < 4 && (
-                <div className={`w-12 h-1 ${s < step ? 'bg-indigo-600' : 'bg-gray-200'}`} />
-              )}
-            </div>
+            <div
+              key={s}
+              className={`h-2 w-16 rounded-full ${s <= step ? 'bg-indigo-600' : 'bg-gray-300'}`}
+            />
           ))}
         </div>
 
-        {/* Form */}
         <div className="bg-white rounded-lg shadow-md p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
               {error}
             </div>
           )}
 
-          {/* Step 1: Account */}
+          {/* Step 1: Account Info */}
           {step === 1 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Create Your Account</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Account Information</h2>
               <input
                 type="text"
-                placeholder="Your Full Name *"
+                placeholder="Full Name *"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
@@ -192,7 +186,7 @@ export default function ProRegisterPage() {
           {/* Step 2: Business Info */}
           {step === 2 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Business Information</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Business Information</h2>
               <input
                 type="text"
                 placeholder="Business Name *"
@@ -232,16 +226,14 @@ export default function ProRegisterPage() {
                 />
                 <input
                   type="text"
-                  placeholder="ZIP"
+                  placeholder="ZIP Code"
                   value={formData.zipCode}
                   onChange={(e) => setFormData({ ...formData, zipCode: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Service Radius (miles)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Service Radius (miles)</label>
                 <select
                   value={formData.serviceRadius}
                   onChange={(e) => setFormData({ ...formData, serviceRadius: e.target.value })}
@@ -256,78 +248,86 @@ export default function ProRegisterPage() {
             </div>
           )}
 
-          {/* Step 3: Services & Rates */}
+          {/* Step 3: Services */}
           {step === 3 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Services & Rates</h2>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Service Categories * (select all that apply)
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {SERVICE_CATEGORIES.map((cat) => (
-                    <label
-                      key={cat.value}
-                      className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition ${
-                        formData.serviceCategories.includes(cat.value)
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-gray-300 hover:border-indigo-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.serviceCategories.includes(cat.value)}
-                        onChange={() => toggleCategory(cat.value)}
-                        className="rounded text-indigo-600"
-                      />
-                      <span className="text-sm">{cat.label}</span>
-                    </label>
-                  ))}
-                </div>
+              <h2 className="text-xl font-semibold text-gray-900">Services Offered</h2>
+              <p className="text-sm text-gray-600">Select all services you provide:</p>
+              <div className="grid grid-cols-2 gap-3">
+                {SERVICE_CATEGORIES.map((cat) => (
+                  <label
+                    key={cat.value}
+                    className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition ${
+                      formData.serviceCategories.includes(cat.value)
+                        ? 'border-indigo-600 bg-indigo-50'
+                        : 'border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.serviceCategories.includes(cat.value)}
+                      onChange={() => handleServiceToggle(cat.value)}
+                      className="rounded text-indigo-600"
+                    />
+                    <span className="text-sm text-gray-700">{cat.label}</span>
+                  </label>
+                ))}
               </div>
-
               <textarea
-                placeholder="Specialties (e.g., Water heaters, Smart home installation...)"
+                placeholder="Specialties or additional skills (optional)"
                 value={formData.specialties}
                 onChange={(e) => setFormData({ ...formData, specialties: e.target.value })}
-                rows={2}
+                rows={3}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
+            </div>
+          )}
 
+          {/* Step 4: Rates & Bio */}
+          {step === 4 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-gray-900">Rates & Profile</h2>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Hourly Rate ($)</label>
-                  <input
-                    type="number"
-                    placeholder="75"
-                    value={formData.hourlyRate}
-                    onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hourly Rate</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-3 text-gray-500">$</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={formData.hourlyRate}
+                      onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
+                      className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Call-out Fee ($)</label>
-                  <input
-                    type="number"
-                    placeholder="50"
-                    value={formData.callOutFee}
-                    onChange={(e) => setFormData({ ...formData, callOutFee: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Call-Out Fee</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-3 text-gray-500">$</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={formData.callOutFee}
+                      onChange={(e) => setFormData({ ...formData, callOutFee: e.target.value })}
+                      className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Emergency Rate ($)</label>
-                  <input
-                    type="number"
-                    placeholder="125"
-                    value={formData.emergencyRate}
-                    onChange={(e) => setFormData({ ...formData, emergencyRate: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Emergency Rate</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-3 text-gray-500">$</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={formData.emergencyRate}
+                      onChange={(e) => setFormData({ ...formData, emergencyRate: e.target.value })}
+                      className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
               </div>
-
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -335,60 +335,17 @@ export default function ProRegisterPage() {
                   onChange={(e) => setFormData({ ...formData, acceptsEmergency: e.target.checked })}
                   className="rounded text-indigo-600"
                 />
-                <span className="text-sm text-gray-700">I accept emergency/after-hours calls</span>
+                <span className="text-gray-700">I accept emergency service calls</span>
               </label>
-            </div>
-          )}
-
-          {/* Step 4: Credentials & Bio */}
-          {step === 4 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Credentials & Profile</h2>
-              
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-blue-800">
-                  <strong>Optional but recommended:</strong> Adding license and insurance info helps build trust with landlords.
-                </p>
-              </div>
-
-              <input
-                type="text"
-                placeholder="License Number (if applicable)"
-                value={formData.licenseNumber}
-                onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
-              <input
-                type="text"
-                placeholder="Insurance Provider"
-                value={formData.insuranceProvider}
-                onChange={(e) => setFormData({ ...formData, insuranceProvider: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
-              <input
-                type="text"
-                placeholder="Insurance Policy Number"
-                value={formData.insurancePolicyNumber}
-                onChange={(e) => setFormData({ ...formData, insurancePolicyNumber: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">About Your Business</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
                 <textarea
-                  placeholder="Tell landlords about your experience, specialties, and what makes your service stand out..."
+                  placeholder="Tell landlords about your experience and why they should choose you..."
                   value={formData.bio}
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                   rows={4}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 />
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800">
-                  By registering, you agree to our terms of service and privacy policy. 
-                  You'll be able to set up Stripe Connect for payments after registration.
-                </p>
               </div>
             </div>
           )}
@@ -397,26 +354,23 @@ export default function ProRegisterPage() {
           <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
             {step > 1 ? (
               <button
-                onClick={prevStep}
+                onClick={() => setStep(step - 1)}
                 className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
-                Back
+                Previous
               </button>
             ) : (
-              <Link
-                href="/auth/signin"
-                className="px-6 py-2 text-gray-600 hover:text-gray-800"
-              >
+              <Link href="/auth/signin" className="px-6 py-2 text-gray-600 hover:text-gray-900">
                 Already have an account?
               </Link>
             )}
 
             {step < 4 ? (
               <button
-                onClick={nextStep}
+                onClick={() => setStep(step + 1)}
                 className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
               >
-                Continue
+                Next
               </button>
             ) : (
               <button
@@ -432,7 +386,7 @@ export default function ProRegisterPage() {
                 ) : (
                   <>
                     <CheckCircle className="h-5 w-5" />
-                    Complete Registration
+                    Create Account
                   </>
                 )}
               </button>
@@ -441,22 +395,19 @@ export default function ProRegisterPage() {
         </div>
 
         {/* Benefits */}
-        <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <Building2 className="h-8 w-8 text-indigo-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-900">Connect with Landlords</p>
-            <p className="text-xs text-gray-500 mt-1">Get invited to their preferred list</p>
-          </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <Wrench className="h-8 w-8 text-indigo-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-900">Manage Jobs</p>
-            <p className="text-xs text-gray-500 mt-1">Calendar, scheduling, invoicing</p>
-          </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <CheckCircle className="h-8 w-8 text-indigo-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-900">Get Paid Fast</p>
-            <p className="text-xs text-gray-500 mt-1">Stripe Connect integration</p>
-          </div>
+        <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-indigo-600" />
+            Why Join RentalIQ?
+          </h3>
+          <ul className="space-y-2 text-sm text-gray-600">
+            <li>✓ Connect directly with property managers and landlords</li>
+            <li>✓ Get notified of service requests in your area</li>
+            <li>✓ Manage your schedule with our built-in calendar</li>
+            <li>✓ Get paid quickly through Stripe Connect</li>
+            <li>✓ Build your reputation with reviews and ratings</li>
+            <li>✓ AI-generated scope of work for clear job expectations</li>
+          </ul>
         </div>
       </div>
     </div>
