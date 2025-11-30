@@ -29,26 +29,24 @@ interface ApplicationData {
   applicationFee: number;
 }
 
-// Occupant structure for lease
+// Types for structured data
 interface Occupant {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  relationship: 'Child' | 'Spouse' | 'Family' | 'Other' | '';
+  relationship: 'CHILD' | 'SPOUSE' | 'FAMILY' | 'OTHER' | '';
   otherRelationship?: string;
 }
 
-// Pet structure for lease
 interface Pet {
-  type: 'Dog' | 'Cat' | 'Other' | '';
+  type: 'DOG' | 'CAT' | 'OTHER' | '';
   otherType?: string;
   breed?: string;
   name: string;
   weight: string;
-  color?: string;
 }
 
-// Common dog breeds for dropdown
+// Common dog breeds
 const DOG_BREEDS = [
   'Labrador Retriever',
   'German Shepherd',
@@ -75,11 +73,11 @@ const DOG_BREEDS = [
   'Pomeranian',
   'Havanese',
   'Shetland Sheepdog',
-  'Brittany',
-  'English Springer Spaniel',
-  'Cocker Spaniel',
-  'Border Collie',
   'Chihuahua',
+  'Pug',
+  'Border Collie',
+  'Mastiff',
+  'Cocker Spaniel',
   'Pit Bull / American Staffordshire Terrier',
   'Mixed Breed',
   'Other (please specify in name field)',
@@ -96,10 +94,8 @@ export default function TenantApplicationPage() {
   const [applicationData, setApplicationData] = useState<ApplicationData | null>(null);
   const [error, setError] = useState('');
 
-  // Occupants state
+  // Structured occupants and pets
   const [occupants, setOccupants] = useState<Occupant[]>([]);
-  
-  // Pets state
   const [pets, setPets] = useState<Pet[]>([]);
 
   const [formData, setFormData] = useState({
@@ -152,10 +148,10 @@ export default function TenantApplicationPage() {
     previousLandlord: '',
     previousLandlordPhone: '',
 
-    // Pets
+    // Pets - now boolean only, details in pets array
     hasPets: false,
 
-    // Additional Occupants
+    // Additional Occupants - now boolean only, details in occupants array
     hasAdditionalOccupants: false,
 
     // Second Applicant
@@ -170,40 +166,6 @@ export default function TenantApplicationPage() {
     applicationFeePaid: false,
     stripePaymentIntentId: '',
   });
-
-  // Add new occupant
-  const addOccupant = () => {
-    setOccupants([...occupants, { firstName: '', lastName: '', dateOfBirth: '', relationship: '' }]);
-  };
-
-  // Remove occupant
-  const removeOccupant = (index: number) => {
-    setOccupants(occupants.filter((_, i) => i !== index));
-  };
-
-  // Update occupant
-  const updateOccupant = (index: number, field: keyof Occupant, value: string) => {
-    const updated = [...occupants];
-    updated[index] = { ...updated[index], [field]: value };
-    setOccupants(updated);
-  };
-
-  // Add new pet
-  const addPet = () => {
-    setPets([...pets, { type: '', name: '', weight: '', breed: '' }]);
-  };
-
-  // Remove pet
-  const removePet = (index: number) => {
-    setPets(pets.filter((_, i) => i !== index));
-  };
-
-  // Update pet
-  const updatePet = (index: number, field: keyof Pet, value: string) => {
-    const updated = [...pets];
-    updated[index] = { ...updated[index], [field]: value };
-    setPets(updated);
-  };
 
   // Fetch application details
   useEffect(() => {
@@ -240,23 +202,56 @@ export default function TenantApplicationPage() {
     }
   }, [link]);
 
+  // Occupant management
+  const addOccupant = () => {
+    setOccupants([...occupants, { firstName: '', lastName: '', dateOfBirth: '', relationship: '' }]);
+  };
+
+  const updateOccupant = (index: number, field: keyof Occupant, value: string) => {
+    const updated = [...occupants];
+    updated[index] = { ...updated[index], [field]: value };
+    setOccupants(updated);
+  };
+
+  const removeOccupant = (index: number) => {
+    setOccupants(occupants.filter((_, i) => i !== index));
+  };
+
+  // Pet management
+  const addPet = () => {
+    setPets([...pets, { type: '', name: '', weight: '' }]);
+  };
+
+  const updatePet = (index: number, field: keyof Pet, value: string) => {
+    const updated = [...pets];
+    updated[index] = { ...updated[index], [field]: value };
+    // Clear breed if type is not DOG
+    if (field === 'type' && value !== 'DOG') {
+      updated[index].breed = undefined;
+    }
+    setPets(updated);
+  };
+
+  const removePet = (index: number) => {
+    setPets(pets.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true);
 
     try {
-      // Prepare submission data with structured occupants and pets
-      const submissionData = {
+      // Prepare structured data
+      const submitData = {
         ...formData,
-        // Convert occupants array to JSON for storage
+        // Convert structured arrays to JSON for storage
         additionalOccupants: occupants.length > 0 ? occupants : null,
-        // Convert pets array to JSON for storage
         petDetails: pets.length > 0 ? pets : null,
       };
 
       const response = await fetch(`/api/applications/${link}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submissionData),
+        body: JSON.stringify(submitData),
       });
 
       const data = await response.json();
@@ -728,36 +723,36 @@ export default function TenantApplicationPage() {
               </h2>
               <p className="text-sm text-gray-600">
                 List all people who will be living in the property besides yourself. 
-                <span className="font-medium text-amber-700"> Note: All occupants over 18 years of age are required to submit a separate application and pass a background check.</span>
+                <span className="font-medium text-amber-700"> All occupants 18 years or older will be required to submit a separate application and pass a background check.</span>
               </p>
 
-              <label className="flex items-center gap-2 mb-4">
+              <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={formData.hasAdditionalOccupants}
                   onChange={(e) => {
                     setFormData({ ...formData, hasAdditionalOccupants: e.target.checked });
-                    if (!e.target.checked) {
-                      setOccupants([]);
+                    if (e.target.checked && occupants.length === 0) {
+                      addOccupant();
                     }
                   }}
                   className="rounded text-indigo-600"
                 />
-                <span className="text-gray-700">I will have additional occupants</span>
+                <span className="text-gray-700">There will be additional occupants living in the property</span>
               </label>
 
               {formData.hasAdditionalOccupants && (
-                <div className="space-y-4">
+                <div className="space-y-4 mt-4">
                   {occupants.map((occupant, index) => (
                     <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
                       <div className="flex justify-between items-center">
-                        <h3 className="font-medium text-gray-900">Occupant {index + 1}</h3>
+                        <h4 className="font-medium text-gray-800">Occupant {index + 1}</h4>
                         <button
                           type="button"
                           onClick={() => removeOccupant(index)}
                           className="text-red-500 hover:text-red-700 p-1"
                         >
-                          <Trash2 className="h-5 w-5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                       
@@ -767,17 +762,17 @@ export default function TenantApplicationPage() {
                           placeholder="First Name *"
                           value={occupant.firstName}
                           onChange={(e) => updateOccupant(index, 'firstName', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                         />
                         <input
                           type="text"
                           placeholder="Last Name *"
                           value={occupant.lastName}
                           onChange={(e) => updateOccupant(index, 'lastName', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
-
+                      
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs text-gray-600 mb-1">Date of Birth *</label>
@@ -785,7 +780,7 @@ export default function TenantApplicationPage() {
                             type="date"
                             value={occupant.dateOfBirth}
                             onChange={(e) => updateOccupant(index, 'dateOfBirth', e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
                         <div>
@@ -793,37 +788,37 @@ export default function TenantApplicationPage() {
                           <select
                             value={occupant.relationship}
                             onChange={(e) => updateOccupant(index, 'relationship', e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                           >
-                            <option value="">Select relationship...</option>
-                            <option value="Spouse">Spouse</option>
-                            <option value="Child">Child</option>
-                            <option value="Family">Family Member</option>
-                            <option value="Other">Other</option>
+                            <option value="">Select...</option>
+                            <option value="SPOUSE">Spouse</option>
+                            <option value="CHILD">Child</option>
+                            <option value="FAMILY">Family Member</option>
+                            <option value="OTHER">Other</option>
                           </select>
                         </div>
                       </div>
 
-                      {occupant.relationship === 'Other' && (
+                      {occupant.relationship === 'OTHER' && (
                         <input
                           type="text"
                           placeholder="Please specify relationship"
                           value={occupant.otherRelationship || ''}
                           onChange={(e) => updateOccupant(index, 'otherRelationship', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                         />
                       )}
 
-                      {/* Age warning for 18+ */}
+                      {/* Age 18+ warning */}
                       {occupant.dateOfBirth && (() => {
                         const birthDate = new Date(occupant.dateOfBirth);
                         const today = new Date();
                         const age = today.getFullYear() - birthDate.getFullYear();
-                        const isOver18 = age > 18 || (age === 18 && today >= new Date(birthDate.setFullYear(birthDate.getFullYear() + 18)));
-                        if (isOver18) {
+                        const isAdult = age >= 18 || (age === 17 && today >= new Date(birthDate.setFullYear(birthDate.getFullYear() + 18)));
+                        if (isAdult) {
                           return (
-                            <div className="bg-amber-50 border border-amber-200 rounded p-2 text-sm text-amber-800">
-                              ⚠️ This occupant is 18 or older and will need to submit a separate application and background check.
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800">
+                              ⚠️ This occupant is 18+ and will need to complete a separate application and background check.
                             </div>
                           );
                         }
@@ -835,16 +830,12 @@ export default function TenantApplicationPage() {
                   <button
                     type="button"
                     onClick={addOccupant}
-                    className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 w-full justify-center"
+                    className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium"
                   >
                     <Plus className="h-5 w-5" />
-                    Add Occupant
+                    Add Another Occupant
                   </button>
                 </div>
-              )}
-
-              {!formData.hasAdditionalOccupants && (
-                <p className="text-gray-500 py-4 text-center">No additional occupants</p>
               )}
             </div>
           )}
@@ -852,9 +843,9 @@ export default function TenantApplicationPage() {
           {/* Step 8: Second Applicant */}
           {currentStep === 8 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900">Second Applicant</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Second Applicant (Co-Signer)</h2>
               <p className="text-sm text-gray-600">
-                If you have a spouse or partner who will be on the lease and shares financial responsibility, they should complete a separate application.
+                If there is a second person who will be on the lease and responsible for rent payments, they must complete their own application.
               </p>
               <label className="flex items-center gap-2">
                 <input
@@ -863,13 +854,20 @@ export default function TenantApplicationPage() {
                   onChange={(e) => setFormData({ ...formData, hasSecondApplicant: e.target.checked })}
                   className="rounded text-indigo-600"
                 />
-                <span className="text-gray-700">There will be a second applicant (spouse/partner on lease)</span>
+                <span className="text-gray-700">There will be a second applicant on the lease</span>
               </label>
               {formData.hasSecondApplicant && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-blue-800">
-                    The second applicant will need to complete their own application using a separate application link. Please contact the landlord to request an additional application link.
+                    The second applicant will need to complete their own application. Please provide their contact info so we can send them an application link.
                   </p>
+                  <textarea
+                    placeholder="Second Applicant Name, Email, and Phone Number"
+                    value={formData.secondApplicantInfo}
+                    onChange={(e) => setFormData({ ...formData, secondApplicantInfo: e.target.value })}
+                    rows={3}
+                    className="w-full mt-3 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
                 </div>
               )}
             </div>
@@ -883,17 +881,17 @@ export default function TenantApplicationPage() {
                 Pets
               </h2>
               <p className="text-sm text-gray-600">
-                Please provide details for each pet. Pet rent may apply based on property policy.
+                Please list all pets that will be living in the property. Pet rent may apply based on property policy.
               </p>
 
-              <label className="flex items-center gap-2 mb-4">
+              <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={formData.hasPets}
                   onChange={(e) => {
                     setFormData({ ...formData, hasPets: e.target.checked });
-                    if (!e.target.checked) {
-                      setPets([]);
+                    if (e.target.checked && pets.length === 0) {
+                      addPet();
                     }
                   }}
                   className="rounded text-indigo-600"
@@ -902,17 +900,17 @@ export default function TenantApplicationPage() {
               </label>
 
               {formData.hasPets && (
-                <div className="space-y-4">
+                <div className="space-y-4 mt-4">
                   {pets.map((pet, index) => (
                     <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
                       <div className="flex justify-between items-center">
-                        <h3 className="font-medium text-gray-900">Pet {index + 1}</h3>
+                        <h4 className="font-medium text-gray-800">Pet {index + 1}</h4>
                         <button
                           type="button"
                           onClick={() => removePet(index)}
                           className="text-red-500 hover:text-red-700 p-1"
                         >
-                          <Trash2 className="h-5 w-5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
 
@@ -921,19 +919,13 @@ export default function TenantApplicationPage() {
                           <label className="block text-xs text-gray-600 mb-1">Pet Type *</label>
                           <select
                             value={pet.type}
-                            onChange={(e) => {
-                              updatePet(index, 'type', e.target.value);
-                              // Clear breed if not a dog
-                              if (e.target.value !== 'Dog') {
-                                updatePet(index, 'breed', '');
-                              }
-                            }}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            onChange={(e) => updatePet(index, 'type', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                           >
                             <option value="">Select type...</option>
-                            <option value="Dog">Dog</option>
-                            <option value="Cat">Cat</option>
-                            <option value="Other">Other (please specify)</option>
+                            <option value="DOG">Dog</option>
+                            <option value="CAT">Cat</option>
+                            <option value="OTHER">Other (please specify)</option>
                           </select>
                         </div>
                         <div>
@@ -943,28 +935,28 @@ export default function TenantApplicationPage() {
                             placeholder="Pet's name"
                             value={pet.name}
                             onChange={(e) => updatePet(index, 'name', e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
                       </div>
 
-                      {pet.type === 'Other' && (
+                      {pet.type === 'OTHER' && (
                         <input
                           type="text"
                           placeholder="Please specify pet type (e.g., Bird, Fish, Rabbit)"
                           value={pet.otherType || ''}
                           onChange={(e) => updatePet(index, 'otherType', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                         />
                       )}
 
-                      {pet.type === 'Dog' && (
+                      {pet.type === 'DOG' && (
                         <div>
                           <label className="block text-xs text-gray-600 mb-1">Breed *</label>
                           <select
                             value={pet.breed || ''}
                             onChange={(e) => updatePet(index, 'breed', e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                           >
                             <option value="">Select breed...</option>
                             {DOG_BREEDS.map((breed) => (
@@ -974,37 +966,15 @@ export default function TenantApplicationPage() {
                         </div>
                       )}
 
-                      {pet.type === 'Cat' && (
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Weight (lbs) *</label>
                         <input
-                          type="text"
-                          placeholder="Breed (optional, e.g., Tabby, Siamese, Mixed)"
-                          value={pet.breed || ''}
-                          onChange={(e) => updatePet(index, 'breed', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          type="number"
+                          placeholder="Weight in pounds"
+                          value={pet.weight}
+                          onChange={(e) => updatePet(index, 'weight', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                         />
-                      )}
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Weight (lbs) *</label>
-                          <input
-                            type="number"
-                            placeholder="Weight in pounds"
-                            value={pet.weight}
-                            onChange={(e) => updatePet(index, 'weight', e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Color/Markings</label>
-                          <input
-                            type="text"
-                            placeholder="e.g., Black, White with spots"
-                            value={pet.color || ''}
-                            onChange={(e) => updatePet(index, 'color', e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
                       </div>
                     </div>
                   ))}
@@ -1012,22 +982,16 @@ export default function TenantApplicationPage() {
                   <button
                     type="button"
                     onClick={addPet}
-                    className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 w-full justify-center"
+                    className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium"
                   >
                     <Plus className="h-5 w-5" />
-                    Add Pet
+                    Add Another Pet
                   </button>
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-800">
-                      <strong>Pet Policy:</strong> Pet rent and deposits may apply. Some breed restrictions may be enforced by insurance requirements. The landlord will review your pet information as part of the application.
-                    </p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                    <strong>Note:</strong> Pet rent and deposits may apply. The landlord will provide specific pet policy details.
                   </div>
                 </div>
-              )}
-
-              {!formData.hasPets && (
-                <p className="text-gray-500 py-4 text-center">No pets</p>
               )}
             </div>
           )}
@@ -1203,27 +1167,22 @@ export default function TenantApplicationPage() {
                   <h3 className="font-semibold text-gray-900">Current Address</h3>
                   <p className="text-sm text-gray-600">{formData.currentAddress}, {formData.currentCity}, {formData.currentState} {formData.currentZip}</p>
                 </div>
-                
-                {/* Occupants Summary */}
                 {occupants.length > 0 && (
                   <div>
                     <h3 className="font-semibold text-gray-900">Additional Occupants ({occupants.length})</h3>
                     {occupants.map((occ, i) => (
                       <p key={i} className="text-sm text-gray-600">
-                        {occ.firstName} {occ.lastName} - {occ.relationship === 'Other' ? occ.otherRelationship : occ.relationship}
+                        {occ.firstName} {occ.lastName} - {occ.relationship === 'OTHER' ? occ.otherRelationship : occ.relationship}
                       </p>
                     ))}
                   </div>
                 )}
-
-                {/* Pets Summary */}
                 {pets.length > 0 && (
                   <div>
                     <h3 className="font-semibold text-gray-900">Pets ({pets.length})</h3>
                     {pets.map((pet, i) => (
                       <p key={i} className="text-sm text-gray-600">
-                        {pet.name} - {pet.type === 'Other' ? pet.otherType : pet.type}
-                        {pet.breed && ` (${pet.breed})`}, {pet.weight} lbs
+                        {pet.name} - {pet.type === 'DOG' ? `Dog (${pet.breed})` : pet.type === 'CAT' ? 'Cat' : pet.otherType}, {pet.weight} lbs
                       </p>
                     ))}
                   </div>
@@ -1232,7 +1191,7 @@ export default function TenantApplicationPage() {
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <p className="text-sm text-amber-900">
                   ⚠️ By submitting this application, you authorize the landlord to conduct credit and background checks. 
-                  You acknowledge that all occupants 18 years of age or older must submit a separate application and pass a background check before being allowed to reside at the property.
+                  All occupants 18 years or older must submit a separate application and pass a background check before occupancy.
                 </p>
               </div>
             </div>
