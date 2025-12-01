@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User, Wrench, LayoutDashboard, PiggyBank } from 'lucide-react';
+import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User, Wrench, LayoutDashboard, PiggyBank, Shield } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Navbar() {
@@ -27,11 +27,18 @@ export default function Navbar() {
     { name: 'Pros', href: '/landlord/pros', icon: Wrench },
   ];
 
+  // Add admin link for super admins
+  const adminNavigation = userRole === 'SUPER_ADMIN' ? [
+    { name: 'Admin', href: '/admin', icon: Shield },
+  ] : [];
+
   const tenantNavigation = [
     { name: 'Tenant Portal', href: '/tenant-portal', icon: DollarSign },
   ];
 
-  const navigation = userRole === 'TENANT' ? tenantNavigation : landlordNavigation;
+  const navigation = userRole === 'TENANT' 
+    ? tenantNavigation 
+    : [...landlordNavigation, ...adminNavigation];
 
   const isActive = (href: string) => {
     if (href === '/') {

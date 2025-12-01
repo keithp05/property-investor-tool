@@ -866,10 +866,102 @@ model WeatherData {
 // ============================================================================
 
 enum UserRole {
-  ADMIN
+  SUPER_ADMIN  // Full platform control
+  ADMIN        // Company admin (future multi-company support)
   LANDLORD
   TENANT
   PRO
+}
+
+// ============================================================================
+// FEATURE FLAGS & SYSTEM SETTINGS
+// ============================================================================
+
+model FeatureFlag {
+  id              String   @id @default(cuid())
+  
+  // Feature identification
+  key             String   @unique  // e.g., "lenders", "documents", "pro_marketplace"
+  name            String            // Human readable name
+  description     String?
+  
+  // Global toggle
+  isEnabled       Boolean  @default(true)
+  
+  // Per-tier settings (which tiers have access)
+  enabledForFree       Boolean @default(false)
+  enabledForPro        Boolean @default(true)
+  enabledForEnterprise Boolean @default(true)
+  
+  // Per-role settings
+  enabledForLandlords  Boolean @default(true)
+  enabledForTenants    Boolean @default(false)
+  enabledForPros       Boolean @default(false)
+  
+  // Optional limits per tier
+  freeTierLimit        Int?    // e.g., 2 properties for free tier
+  proTierLimit         Int?    // e.g., 25 properties for pro
+  enterpriseTierLimit  Int?    // null = unlimited
+  
+  // Metadata
+  category        String?  // CORE, PREMIUM, BETA, etc.
+  sortOrder       Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([key])
+  @@index([category])
+}
+
+model SystemSetting {
+  id              String   @id @default(cuid())
+  
+  key             String   @unique
+  value           String
+  type            SettingType @default(STRING)
+  description     String?
+  
+  // Grouping
+  category        String   @default("general")
+  
+  // Security
+  isPublic        Boolean  @default(false)  // Can non-admins see this?
+  isEditable      Boolean  @default(true)   // Can it be changed via UI?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([category])
+}
+
+enum SettingType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+// Audit log for admin actions
+model AdminAuditLog {
+  id              String   @id @default(cuid())
+  
+  adminId         String   // User ID of admin who performed action
+  adminEmail      String
+  
+  action          String   // e.g., "USER_SUSPENDED", "FEATURE_TOGGLED"
+  targetType      String?  // e.g., "User", "FeatureFlag"
+  targetId        String?  // ID of affected record
+  
+  details         Json?    // Additional context
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 enum SubscriptionTier {
