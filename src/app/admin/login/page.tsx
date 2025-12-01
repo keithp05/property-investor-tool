@@ -39,7 +39,9 @@ export default function AdminLoginPage() {
       const data = await res.json();
 
       if (!data.success) {
-        setError(data.error || 'Login failed');
+        // Show debug info if available
+        const debugInfo = data.debug ? ` (env: ${data.debug.envVarSet}, expected: ${data.debug.expectedLength}, received: ${data.debug.receivedLength})` : '';
+        setError((data.error || 'Login failed') + debugInfo);
         return;
       }
 

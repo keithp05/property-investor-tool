@@ -26,7 +26,15 @@ export async function POST(request: NextRequest) {
     });
     
     if (password !== ADMIN_SECRET) {
-      return NextResponse.json({ success: false, error: 'Invalid admin password' }, { status: 401 });
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Invalid admin password',
+        debug: {
+          envVarSet: !!process.env.ADMIN_SECRET,
+          expectedLength: ADMIN_SECRET?.length,
+          receivedLength: password?.length
+        }
+      }, { status: 401 });
     }
 
     // Check if MFA is already set up
