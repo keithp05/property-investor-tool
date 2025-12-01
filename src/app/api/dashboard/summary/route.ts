@@ -11,13 +11,21 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) {
+    if (!session?.user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get or create landlord profile
+    const userId = (session.user as any).id;
+    
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'User ID not found in session' }, { status: 401 });
+    }
+
+    console.log('Dashboard API - User ID:', userId);
+
+    // Get landlord profile with properties
     let landlordProfile = await prisma.landlordProfile.findUnique({
-      where: { userId: session.user.id },
+      where: { userId },
       include: {
         properties: {
           include: {
@@ -40,25 +48,18 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        tenants: {
-          include: {
-            rentPayments: {
-              where: {
-                status: { in: ['PENDING', 'LATE'] },
-              },
-            },
-          },
-        },
       },
     });
 
     // Auto-create landlord profile if it doesn't exist
     if (!landlordProfile) {
-      console.log('Creating landlord profile for user:', session.user.id);
-      landlordProfile = await prisma.landlordProfile.create({
-        data: {
-          userId: session.user.id,
-        },
+      console.log('Creating landlord profile for user:', userId);
+      await prisma.landlordProfile.create({
+        data: { userId },
+      });
+      // Re-fetch with includes
+      landlordProfile = await prisma.landlordProfile.findUnique({
+        where: { userId },
         include: {
           properties: {
             include: {
@@ -81,18 +82,15 @@ export async function GET(request: NextRequest) {
               },
             },
           },
-          tenants: {
-            include: {
-              rentPayments: {
-                where: {
-                  status: { in: ['PENDING', 'LATE'] },
-                },
-              },
-            },
-          },
         },
       });
     }
+
+    if (!landlordProfile) {
+      return NextResponse.json({ success: false, error: 'Failed to create landlord profile' }, { status: 500 });
+    }
+
+    console.log('Landlord profile found:', landlordProfile.id, 'Properties:', landlordProfile.properties.length);
 
     // Calculate totals
     let totalPropertyValue = 0;
@@ -221,7 +219,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Dashboard summary error:', error);
     return NextResponse.json(
-      { error: 'Failed to get dashboard summary', details: error.message },
+      { success: false, error: 'Failed to get dashboard summary', details: error.message },
       { status: 500 }
     );
   }
