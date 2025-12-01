@@ -99,8 +99,8 @@ export default function DashboardPage() {
         setProperties(data.properties || []);
         setPendingActions(data.pendingActions || []);
       } else {
-        console.error('Dashboard API error:', data.error);
-        setError(data.error || 'Failed to load dashboard');
+        console.error('Dashboard API error:', data.error, data.details);
+        setError(data.details || data.error || 'Failed to load dashboard');
       }
     } catch (error: any) {
       console.error('Failed to fetch dashboard:', error);
