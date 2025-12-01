@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const role = searchParams.get('role') || '';
     const tier = searchParams.get('tier') || '';
+    const status = searchParams.get('status') || '';
+    const billing = searchParams.get('billing') || '';
+    const mfa = searchParams.get('mfa') || '';
 
     const skip = (page - 1) * limit;
 
@@ -75,6 +78,31 @@ export async function GET(request: NextRequest) {
       where.subscriptionTier = tier;
     }
 
+    if (status) {
+      if (status === 'active') {
+        where.isActive = true;
+        where.isSuspended = false;
+      } else if (status === 'suspended') {
+        where.isSuspended = true;
+      } else if (status === 'inactive') {
+        where.isActive = false;
+      }
+    }
+
+    if (billing) {
+      if (billing === 'current') {
+        where.subscriptionStatus = 'ACTIVE';
+      } else if (billing === 'past_due') {
+        where.subscriptionStatus = 'PAST_DUE';
+      } else if (billing === 'cancelled') {
+        where.subscriptionStatus = 'CANCELLED';
+      }
+    }
+
+    if (mfa) {
+      where.mfaEnabled = mfa === 'enabled';
+    }
+
     // Get users with pagination
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -84,8 +112,24 @@ export async function GET(request: NextRequest) {
           email: true,
           name: true,
           role: true,
+          isActive: true,
+          isSuspended: true,
+          suspendedAt: true,
+          suspendedReason: true,
+          lastLoginAt: true,
+          lastActiveAt: true,
+          loginCount: true,
+          mfaEnabled: true,
+          mfaVerifiedAt: true,
           subscriptionTier: true,
           subscriptionStatus: true,
+          subscriptionEndsAt: true,
+          billingEmail: true,
+          lastPaymentAt: true,
+          lastPaymentAmount: true,
+          failedPaymentCount: true,
+          nextBillingDate: true,
+          stripeCustomerId: true,
           createdAt: true,
           updatedAt: true,
           landlordProfile: {
@@ -116,17 +160,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       users: users.map(user => ({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        subscriptionTier: user.subscriptionTier,
-        subscriptionStatus: user.subscriptionStatus,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-        landlordProfile: user.landlordProfile,
-        tenantProfile: user.tenantProfile,
-        proProfile: user.proProfile,
+        ...user,
+        lastPaymentAmount: user.lastPaymentAmount ? Number(user.lastPaymentAmount) : null,
       })),
       pagination: {
         page,
@@ -147,7 +182,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/admin/users
- * Update a user's role, tier, or status
+ * Update a user's role, tier, status, MFA, etc.
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -165,7 +200,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, role, subscriptionTier, subscriptionStatus } = body;
+    const { 
+      userId, 
+      role, 
+      subscriptionTier, 
+      subscriptionStatus,
+      isActive,
+      isSuspended,
+      suspendedReason,
+      mfaEnabled,
+      resetMfa,
+    } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
@@ -175,19 +220,50 @@ export async function PATCH(request: NextRequest) {
     const updateData: any = {};
     const changes: string[] = [];
 
-    if (role) {
+    if (role !== undefined) {
       updateData.role = role;
       changes.push(`role -> ${role}`);
     }
     
-    if (subscriptionTier) {
+    if (subscriptionTier !== undefined) {
       updateData.subscriptionTier = subscriptionTier;
       changes.push(`tier -> ${subscriptionTier}`);
     }
     
-    if (subscriptionStatus) {
+    if (subscriptionStatus !== undefined) {
       updateData.subscriptionStatus = subscriptionStatus;
-      changes.push(`status -> ${subscriptionStatus}`);
+      changes.push(`subscription status -> ${subscriptionStatus}`);
+    }
+
+    if (isActive !== undefined) {
+      updateData.isActive = isActive;
+      changes.push(`active -> ${isActive}`);
+    }
+
+    if (isSuspended !== undefined) {
+      updateData.isSuspended = isSuspended;
+      if (isSuspended) {
+        updateData.suspendedAt = new Date();
+        updateData.suspendedReason = suspendedReason || 'Suspended by admin';
+        changes.push('suspended');
+      } else {
+        updateData.suspendedAt = null;
+        updateData.suspendedReason = null;
+        changes.push('unsuspended');
+      }
+    }
+
+    if (mfaEnabled !== undefined) {
+      updateData.mfaEnabled = mfaEnabled;
+      changes.push(`MFA -> ${mfaEnabled ? 'enabled' : 'disabled'}`);
+    }
+
+    if (resetMfa) {
+      updateData.mfaEnabled = false;
+      updateData.mfaSecret = null;
+      updateData.mfaBackupCodes = [];
+      updateData.mfaVerifiedAt = null;
+      changes.push('MFA reset');
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -203,6 +279,9 @@ export async function PATCH(request: NextRequest) {
         email: true,
         name: true,
         role: true,
+        isActive: true,
+        isSuspended: true,
+        mfaEnabled: true,
         subscriptionTier: true,
         subscriptionStatus: true,
       },

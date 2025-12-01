@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { 
   Search, ChevronLeft, ChevronRight, Edit3, 
-  Loader2, X, Check, MoreVertical, Shield
+  Loader2, X, Check, Shield, ShieldOff, ShieldCheck,
+  CreditCard, Clock, AlertTriangle, Ban, CheckCircle,
+  Key, KeyRound
 } from 'lucide-react';
 
 interface User {
@@ -11,8 +13,23 @@ interface User {
   email: string;
   name: string | null;
   role: string;
+  isActive: boolean;
+  isSuspended: boolean;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+  lastLoginAt: string | null;
+  lastActiveAt: string | null;
+  loginCount: number;
+  mfaEnabled: boolean;
+  mfaVerifiedAt: string | null;
   subscriptionTier: string;
   subscriptionStatus: string;
+  subscriptionEndsAt: string | null;
+  lastPaymentAt: string | null;
+  lastPaymentAmount: number | null;
+  failedPaymentCount: number;
+  nextBillingDate: string | null;
+  stripeCustomerId: string | null;
   createdAt: string;
   landlordProfile?: { id: string; company: string | null; _count: { properties: number } };
   proProfile?: { id: string; businessName: string; isVerified: boolean };
@@ -23,18 +40,32 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  
+  // Filters
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [tierFilter, setTierFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [billingFilter, setBillingFilter] = useState('');
+  const [mfaFilter, setMfaFilter] = useState('');
   
   // Edit modal
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ role: '', tier: '', status: '' });
+  const [editForm, setEditForm] = useState({ 
+    role: '', 
+    tier: '', 
+    subscriptionStatus: '',
+    isSuspended: false,
+    suspendedReason: '',
+    mfaEnabled: false,
+    resetMfa: false,
+  });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadUsers();
-  }, [page, search, roleFilter, tierFilter]);
+  }, [page, search, roleFilter, tierFilter, statusFilter, billingFilter, mfaFilter]);
 
   async function loadUsers() {
     try {
@@ -45,6 +76,9 @@ export default function UsersPage() {
         ...(search && { search }),
         ...(roleFilter && { role: roleFilter }),
         ...(tierFilter && { tier: tierFilter }),
+        ...(statusFilter && { status: statusFilter }),
+        ...(billingFilter && { billing: billingFilter }),
+        ...(mfaFilter && { mfa: mfaFilter }),
       });
       
       const response = await fetch(`/api/admin/users?${params}`);
@@ -53,6 +87,7 @@ export default function UsersPage() {
       if (data.success) {
         setUsers(data.users);
         setTotalPages(data.pagination.totalPages);
+        setTotal(data.pagination.total);
       }
     } catch (err) {
       console.error('Failed to load users:', err);
@@ -73,7 +108,11 @@ export default function UsersPage() {
           userId: editingUser.id,
           ...(editForm.role && { role: editForm.role }),
           ...(editForm.tier && { subscriptionTier: editForm.tier }),
-          ...(editForm.status && { subscriptionStatus: editForm.status }),
+          ...(editForm.subscriptionStatus && { subscriptionStatus: editForm.subscriptionStatus }),
+          isSuspended: editForm.isSuspended,
+          suspendedReason: editForm.suspendedReason,
+          mfaEnabled: editForm.mfaEnabled,
+          resetMfa: editForm.resetMfa,
         }),
       });
       
@@ -97,28 +136,31 @@ export default function UsersPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">Users</h1>
-        <p className="text-gray-400">Manage platform users, roles, and subscriptions</p>
+        <p className="text-gray-400">Manage {total.toLocaleString()} platform users</p>
       </div>
 
       {/* Filters */}
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 mb-6">
         <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[250px]">
+          {/* Search */}
+          <div className="flex-1 min-w-[200px]">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
               <input
                 type="text"
-                placeholder="Search by email or name..."
+                placeholder="Search email or name..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
           </div>
+          
+          {/* Role Filter */}
           <select
             value={roleFilter}
             onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-            className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500"
+            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
           >
             <option value="">All Roles</option>
             <option value="LANDLORD">Landlord</option>
@@ -127,15 +169,52 @@ export default function UsersPage() {
             <option value="ADMIN">Admin</option>
             <option value="SUPER_ADMIN">Super Admin</option>
           </select>
+          
+          {/* Tier Filter */}
           <select
             value={tierFilter}
             onChange={(e) => { setTierFilter(e.target.value); setPage(1); }}
-            className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500"
+            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
           >
             <option value="">All Tiers</option>
             <option value="FREE">Free</option>
             <option value="PRO">Pro</option>
             <option value="ENTERPRISE">Enterprise</option>
+          </select>
+
+          {/* Account Status */}
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+          >
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+            <option value="inactive">Inactive</option>
+          </select>
+
+          {/* Billing Status */}
+          <select
+            value={billingFilter}
+            onChange={(e) => { setBillingFilter(e.target.value); setPage(1); }}
+            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+          >
+            <option value="">All Billing</option>
+            <option value="current">Current</option>
+            <option value="past_due">Past Due</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          {/* MFA Filter */}
+          <select
+            value={mfaFilter}
+            onChange={(e) => { setMfaFilter(e.target.value); setPage(1); }}
+            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm"
+          >
+            <option value="">MFA Status</option>
+            <option value="enabled">MFA Enabled</option>
+            <option value="disabled">MFA Disabled</option>
           </select>
         </div>
       </div>
@@ -148,69 +227,101 @@ export default function UsersPage() {
           </div>
         ) : (
           <>
-            <table className="w-full">
-              <thead className="bg-gray-800/50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tier</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Joined</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-800/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
-                          <span className="text-sm font-medium text-gray-300">
-                            {(user.name || user.email).charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-white">{user.name || 'No name'}</p>
-                          <p className="text-sm text-gray-500">{user.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <RoleBadge role={user.role} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <TierBadge tier={user.subscriptionTier} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={user.subscriptionStatus} />
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-400">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => {
-                          setEditingUser(user);
-                          setEditForm({
-                            role: user.role,
-                            tier: user.subscriptionTier,
-                            status: user.subscriptionStatus,
-                          });
-                        }}
-                        className="p-2 text-gray-400 hover:text-purple-400 hover:bg-gray-800 rounded-lg transition-colors"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-800/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">User</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Role</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Subscription</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Billing</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">MFA</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Activity</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {users.map((user) => (
+                    <tr key={user.id} className="hover:bg-gray-800/30 transition-colors">
+                      {/* User */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-medium text-gray-300">
+                              {(user.name || user.email).charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-white truncate">{user.name || 'No name'}</p>
+                            <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      
+                      {/* Role */}
+                      <td className="px-4 py-3">
+                        <RoleBadge role={user.role} />
+                      </td>
+                      
+                      {/* Account Status */}
+                      <td className="px-4 py-3">
+                        <AccountStatus user={user} />
+                      </td>
+                      
+                      {/* Subscription */}
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          <TierBadge tier={user.subscriptionTier} />
+                          <SubscriptionStatusBadge status={user.subscriptionStatus} />
+                        </div>
+                      </td>
+                      
+                      {/* Billing */}
+                      <td className="px-4 py-3">
+                        <BillingInfo user={user} />
+                      </td>
+                      
+                      {/* MFA */}
+                      <td className="px-4 py-3">
+                        <MfaStatus user={user} />
+                      </td>
+                      
+                      {/* Activity */}
+                      <td className="px-4 py-3">
+                        <ActivityInfo user={user} />
+                      </td>
+                      
+                      {/* Actions */}
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => {
+                            setEditingUser(user);
+                            setEditForm({
+                              role: user.role,
+                              tier: user.subscriptionTier,
+                              subscriptionStatus: user.subscriptionStatus,
+                              isSuspended: user.isSuspended,
+                              suspendedReason: user.suspendedReason || '',
+                              mfaEnabled: user.mfaEnabled,
+                              resetMfa: false,
+                            });
+                          }}
+                          className="p-2 text-gray-400 hover:text-purple-400 hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-800">
               <p className="text-sm text-gray-500">
-                Page {page} of {totalPages}
+                Page {page} of {totalPages} ({total} users)
               </p>
               <div className="flex gap-2">
                 <button
@@ -235,19 +346,23 @@ export default function UsersPage() {
 
       {/* Edit User Modal */}
       {editingUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-xl border border-gray-800 max-w-md w-full">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 max-w-lg w-full my-8">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
               <h2 className="text-lg font-semibold text-white">Edit User</h2>
               <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <p className="text-sm text-gray-400 mb-1">User</p>
-                <p className="text-white font-medium">{editingUser.email}</p>
+            
+            <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+              {/* User Info */}
+              <div className="p-3 bg-gray-800 rounded-lg">
+                <p className="text-white font-medium">{editingUser.name || 'No name'}</p>
+                <p className="text-sm text-gray-400">{editingUser.email}</p>
               </div>
+
+              {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
                 <select
@@ -262,6 +377,8 @@ export default function UsersPage() {
                   <option value="SUPER_ADMIN">Super Admin</option>
                 </select>
               </div>
+
+              {/* Subscription Tier */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Subscription Tier</label>
                 <select
@@ -274,11 +391,13 @@ export default function UsersPage() {
                   <option value="ENTERPRISE">Enterprise</option>
                 </select>
               </div>
+
+              {/* Subscription Status */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Subscription Status</label>
                 <select
-                  value={editForm.status}
-                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  value={editForm.subscriptionStatus}
+                  onChange={(e) => setEditForm({ ...editForm, subscriptionStatus: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white"
                 >
                   <option value="INACTIVE">Inactive</option>
@@ -288,7 +407,55 @@ export default function UsersPage() {
                   <option value="CANCELLED">Cancelled</option>
                 </select>
               </div>
+
+              {/* Suspend Account */}
+              <div className="p-4 bg-gray-800 rounded-lg space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isSuspended}
+                    onChange={(e) => setEditForm({ ...editForm, isSuspended: e.target.checked })}
+                    className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-red-500 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-medium text-red-400">Suspend Account</span>
+                </label>
+                {editForm.isSuspended && (
+                  <input
+                    type="text"
+                    placeholder="Reason for suspension..."
+                    value={editForm.suspendedReason}
+                    onChange={(e) => setEditForm({ ...editForm, suspendedReason: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
+                  />
+                )}
+              </div>
+
+              {/* MFA Settings */}
+              <div className="p-4 bg-gray-800 rounded-lg space-y-3">
+                <p className="text-sm font-medium text-gray-300 mb-2">MFA Settings</p>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.mfaEnabled}
+                    onChange={(e) => setEditForm({ ...editForm, mfaEnabled: e.target.checked })}
+                    className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-purple-500 focus:ring-purple-500"
+                  />
+                  <span className="text-sm text-gray-300">MFA Enabled</span>
+                </label>
+                {editingUser.mfaEnabled && (
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editForm.resetMfa}
+                      onChange={(e) => setEditForm({ ...editForm, resetMfa: e.target.checked })}
+                      className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-orange-500 focus:ring-orange-500"
+                    />
+                    <span className="text-sm text-orange-400">Reset MFA (user will need to set up again)</span>
+                  </label>
+                )}
+              </div>
             </div>
+            
             <div className="flex gap-3 px-6 py-4 border-t border-gray-800">
               <button
                 onClick={() => setEditingUser(null)}
@@ -312,23 +479,25 @@ export default function UsersPage() {
   );
 }
 
+// Component: Role Badge
 function RoleBadge({ role }: { role: string }) {
   const styles: Record<string, string> = {
-    SUPER_ADMIN: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-    ADMIN: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
-    LANDLORD: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    TENANT: 'bg-green-500/20 text-green-400 border-green-500/30',
-    PRO: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    SUPER_ADMIN: 'bg-purple-500/20 text-purple-400',
+    ADMIN: 'bg-indigo-500/20 text-indigo-400',
+    LANDLORD: 'bg-blue-500/20 text-blue-400',
+    TENANT: 'bg-green-500/20 text-green-400',
+    PRO: 'bg-orange-500/20 text-orange-400',
   };
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${styles[role] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${styles[role] || 'bg-gray-500/20 text-gray-400'}`}>
       {role === 'SUPER_ADMIN' && <Shield className="h-3 w-3" />}
       {role.replace('_', ' ')}
     </span>
   );
 }
 
+// Component: Tier Badge
 function TierBadge({ tier }: { tier: string }) {
   const styles: Record<string, string> = {
     FREE: 'bg-gray-500/20 text-gray-400',
@@ -337,24 +506,137 @@ function TierBadge({ tier }: { tier: string }) {
   };
 
   return (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${styles[tier] || 'bg-gray-500/20 text-gray-400'}`}>
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[tier] || 'bg-gray-500/20 text-gray-400'}`}>
       {tier}
     </span>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    ACTIVE: 'bg-green-500/20 text-green-400',
-    INACTIVE: 'bg-gray-500/20 text-gray-400',
-    TRIALING: 'bg-blue-500/20 text-blue-400',
-    PAST_DUE: 'bg-orange-500/20 text-orange-400',
-    CANCELLED: 'bg-red-500/20 text-red-400',
+// Component: Subscription Status Badge
+function SubscriptionStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { style: string; icon: any }> = {
+    ACTIVE: { style: 'text-green-400', icon: CheckCircle },
+    INACTIVE: { style: 'text-gray-500', icon: Clock },
+    TRIALING: { style: 'text-blue-400', icon: Clock },
+    PAST_DUE: { style: 'text-orange-400', icon: AlertTriangle },
+    CANCELLED: { style: 'text-red-400', icon: Ban },
   };
 
+  const c = config[status] || config.INACTIVE;
+  const Icon = c.icon;
+
   return (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-500/20 text-gray-400'}`}>
+    <span className={`inline-flex items-center gap-1 text-xs ${c.style}`}>
+      <Icon className="h-3 w-3" />
       {status.replace('_', ' ')}
     </span>
+  );
+}
+
+// Component: Account Status
+function AccountStatus({ user }: { user: User }) {
+  if (user.isSuspended) {
+    return (
+      <div>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">
+          <Ban className="h-3 w-3" />
+          Suspended
+        </span>
+        {user.suspendedReason && (
+          <p className="text-xs text-gray-500 mt-1 truncate max-w-[120px]" title={user.suspendedReason}>
+            {user.suspendedReason}
+          </p>
+        )}
+      </div>
+    );
+  }
+  
+  if (!user.isActive) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-400">
+        Inactive
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
+      <CheckCircle className="h-3 w-3" />
+      Active
+    </span>
+  );
+}
+
+// Component: Billing Info
+function BillingInfo({ user }: { user: User }) {
+  if (user.subscriptionTier === 'FREE') {
+    return <span className="text-xs text-gray-500">Free tier</span>;
+  }
+
+  return (
+    <div className="space-y-1">
+      {user.lastPaymentAt && (
+        <p className="text-xs text-gray-400">
+          Last: ${user.lastPaymentAmount?.toFixed(2) || '0'} on {new Date(user.lastPaymentAt).toLocaleDateString()}
+        </p>
+      )}
+      {user.nextBillingDate && (
+        <p className="text-xs text-gray-500">
+          Next: {new Date(user.nextBillingDate).toLocaleDateString()}
+        </p>
+      )}
+      {user.failedPaymentCount > 0 && (
+        <p className="text-xs text-red-400">
+          {user.failedPaymentCount} failed payment(s)
+        </p>
+      )}
+      {!user.lastPaymentAt && !user.nextBillingDate && (
+        <span className="text-xs text-gray-500">No billing</span>
+      )}
+    </div>
+  );
+}
+
+// Component: MFA Status
+function MfaStatus({ user }: { user: User }) {
+  if (user.mfaEnabled) {
+    return (
+      <div>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
+          <ShieldCheck className="h-3 w-3" />
+          Enabled
+        </span>
+        {user.mfaVerifiedAt && (
+          <p className="text-xs text-gray-500 mt-1">
+            Since {new Date(user.mfaVerifiedAt).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-500">
+      <ShieldOff className="h-3 w-3" />
+      Disabled
+    </span>
+  );
+}
+
+// Component: Activity Info
+function ActivityInfo({ user }: { user: User }) {
+  return (
+    <div className="space-y-1">
+      {user.lastLoginAt ? (
+        <p className="text-xs text-gray-400">
+          Last login: {new Date(user.lastLoginAt).toLocaleDateString()}
+        </p>
+      ) : (
+        <p className="text-xs text-gray-500">Never logged in</p>
+      )}
+      <p className="text-xs text-gray-500">
+        {user.loginCount} logins
+      </p>
+    </div>
   );
 }

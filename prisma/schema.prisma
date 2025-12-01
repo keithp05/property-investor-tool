@@ -23,12 +23,34 @@ model User {
   image         String?
   role          UserRole  @default(TENANT)
 
+  // Account Status
+  isActive      Boolean   @default(true)
+  isSuspended   Boolean   @default(false)
+  suspendedAt   DateTime?
+  suspendedReason String?
+  lastLoginAt   DateTime?
+  lastActiveAt  DateTime?
+  loginCount    Int       @default(0)
+
+  // MFA (Multi-Factor Authentication)
+  mfaEnabled    Boolean   @default(false)
+  mfaSecret     String?   // TOTP secret (encrypted)
+  mfaBackupCodes String[] // Hashed backup codes
+  mfaVerifiedAt DateTime?
+
   // Subscription
   subscriptionTier   SubscriptionTier @default(FREE)
   stripeCustomerId   String?          @unique
   stripeSubscriptionId String?        @unique
   subscriptionStatus SubscriptionStatus @default(INACTIVE)
   subscriptionEndsAt DateTime?
+  
+  // Billing
+  billingEmail       String?
+  lastPaymentAt      DateTime?
+  lastPaymentAmount  Decimal?
+  failedPaymentCount Int       @default(0)
+  nextBillingDate    DateTime?
 
   // Relations
   accounts      Account[]
@@ -42,6 +64,8 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   @@index([email])
+  @@index([subscriptionStatus])
+  @@index([isActive])
 }
 
 model Account {
