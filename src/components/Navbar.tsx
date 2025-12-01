@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User, Wrench } from 'lucide-react';
+import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User, Wrench, LayoutDashboard, PiggyBank } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Navbar() {
@@ -19,12 +19,12 @@ export default function Navbar() {
   const userRole = (session?.user as any)?.role;
 
   const landlordNavigation = [
-    { name: 'Home', href: '/', icon: Home },
-    { name: 'Search Properties', href: '/properties/search', icon: Search },
-    { name: 'My Properties', href: '/properties/my-properties', icon: Home },
-    { name: 'Lease Generator', href: '/lease/generate', icon: FileText },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Properties', href: '/properties/my-properties', icon: Home },
     { name: 'Tenants', href: '/tenants', icon: Users },
-    { name: 'Preferred Pros', href: '/landlord/pros', icon: Wrench },
+    { name: 'Documents', href: '/documents', icon: FileText },
+    { name: 'Lenders', href: '/lenders', icon: PiggyBank },
+    { name: 'Pros', href: '/landlord/pros', icon: Wrench },
   ];
 
   const tenantNavigation = [

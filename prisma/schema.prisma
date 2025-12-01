@@ -106,6 +106,8 @@ model LandlordProfile {
   tenants         Tenant[]
   preferredPros   LandlordPro[]
   serviceRequests ServiceRequest[]
+  documents       LandlordDocument[]
+  lenders         Lender[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -186,6 +188,7 @@ model ProProfile {
   appointments        Appointment[]
   reviews             ProReview[]
   messages            ServiceMessage[]
+  documents           ProDocument[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -632,6 +635,7 @@ model Property {
   rentPayments    RentPayment[]
   tenantApplications TenantApplication[]
   weatherData     WeatherData[]
+  landlordDocuments LandlordDocument[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -1040,4 +1044,175 @@ model TenantApplication {
   @@index([propertyId])
   @@index([landlordId])
   @@index([applicationLink])
+}
+
+// ============================================================================
+// DOCUMENTS
+// ============================================================================
+
+// Pro Documents (licenses, insurance, certifications)
+model ProDocument {
+  id              String   @id @default(cuid())
+  proId           String
+  pro             ProProfile @relation(fields: [proId], references: [id], onDelete: Cascade)
+
+  // Document Info
+  name            String
+  type            ProDocumentType
+  description     String?
+
+  // File Storage
+  fileUrl         String
+  fileName        String
+  fileSize        Int?     // bytes
+  mimeType        String?
+
+  // Expiration Tracking
+  issueDate       DateTime?
+  expirationDate  DateTime?
+  isExpired       Boolean  @default(false)
+
+  // Verification
+  isVerified      Boolean  @default(false)
+  verifiedAt      DateTime?
+  verifiedBy      String?  // Admin userId who verified
+
+  uploadedAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([proId])
+  @@index([type])
+  @@index([expirationDate])
+}
+
+enum ProDocumentType {
+  LICENSE
+  INSURANCE_CERTIFICATE
+  BOND
+  CERTIFICATION
+  W9
+  BUSINESS_LICENSE
+  OTHER
+}
+
+// Landlord Documents (tax statements, insurance, general docs)
+model LandlordDocument {
+  id              String   @id @default(cuid())
+  landlordId      String
+  landlord        LandlordProfile @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+
+  // Optional: link to specific property
+  propertyId      String?
+  property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  // Document Info
+  name            String
+  type            LandlordDocumentType
+  description     String?
+  year            Int?     // For tax documents
+
+  // File Storage
+  fileUrl         String
+  fileName        String
+  fileSize        Int?
+  mimeType        String?
+
+  // Expiration Tracking
+  expirationDate  DateTime?
+  isExpired       Boolean  @default(false)
+
+  uploadedAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([landlordId])
+  @@index([propertyId])
+  @@index([type])
+}
+
+enum LandlordDocumentType {
+  TAX_RETURN
+  TAX_STATEMENT
+  PROPERTY_TAX
+  INSURANCE_POLICY
+  INSURANCE_CERTIFICATE
+  LEASE_AGREEMENT
+  LEASE_ADDENDUM
+  PROPERTY_DEED
+  TITLE_INSURANCE
+  MORTGAGE_STATEMENT
+  BANK_STATEMENT
+  INSPECTION_REPORT
+  APPRAISAL
+  HOA_DOCUMENTS
+  UTILITY_BILLS
+  CONTRACTOR_AGREEMENT
+  OTHER
+}
+
+// ============================================================================
+// LENDERS
+// ============================================================================
+
+model Lender {
+  id              String   @id @default(cuid())
+  landlordId      String
+  landlord        LandlordProfile @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+
+  // Lender Info
+  name            String
+  type            LenderType
+  contactName     String?
+  email           String?
+  phone           String?
+  website         String?
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?
+
+  // Loan Terms (typical)
+  minLoanAmount   Decimal?
+  maxLoanAmount   Decimal?
+  interestRateMin Float?   // e.g., 6.5
+  interestRateMax Float?   // e.g., 12.0
+  ltvMax          Float?   // Max Loan-to-Value percentage
+  termMonthsMin   Int?     // e.g., 12
+  termMonthsMax   Int?     // e.g., 360
+  pointsMin       Float?   // Origination points
+  pointsMax       Float?
+
+  // For Hard Money / Private
+  minCreditScore  Int?
+  requiresAppraisal Boolean @default(true)
+  requiresIncome  Boolean @default(true)
+  timeToClose     String?  // e.g., "7-14 days"
+
+  // Specialties
+  loanTypes       String[] // PURCHASE, REFINANCE, CASH_OUT, CONSTRUCTION, BRIDGE
+  propertyTypes   String[] // SFR, MULTI_FAMILY, COMMERCIAL, LAND
+
+  // Notes
+  notes           String?
+  rating          Int?     // 1-5 star rating
+  lastContactDate DateTime?
+
+  // Status
+  isActive        Boolean  @default(true)
+  isFavorite      Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([landlordId])
+  @@index([type])
+}
+
+enum LenderType {
+  BANK
+  CREDIT_UNION
+  MORTGAGE_COMPANY
+  HARD_MONEY
+  PRIVATE_INVESTOR
+  CROWDFUNDING
+  OTHER
 }
