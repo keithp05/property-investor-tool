@@ -18,6 +18,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify master password
+    console.log('Admin login attempt:', { 
+      receivedPasswordLength: password?.length,
+      expectedPasswordLength: ADMIN_SECRET?.length,
+      envVarSet: !!process.env.ADMIN_SECRET,
+      match: password === ADMIN_SECRET
+    });
+    
     if (password !== ADMIN_SECRET) {
       return NextResponse.json({ success: false, error: 'Invalid admin password' }, { status: 401 });
     }
