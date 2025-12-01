@@ -12,11 +12,11 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get landlord profile
-    const landlordProfile = await prisma.landlordProfile.findUnique({
+    // Get or create landlord profile
+    let landlordProfile = await prisma.landlordProfile.findUnique({
       where: { userId: session.user.id },
       include: {
         properties: {
@@ -52,8 +52,46 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Auto-create landlord profile if it doesn't exist
     if (!landlordProfile) {
-      return NextResponse.json({ error: 'Landlord profile not found' }, { status: 404 });
+      console.log('Creating landlord profile for user:', session.user.id);
+      landlordProfile = await prisma.landlordProfile.create({
+        data: {
+          userId: session.user.id,
+        },
+        include: {
+          properties: {
+            include: {
+              currentTenancy: true,
+              rentPayments: {
+                where: {
+                  status: { in: ['PENDING', 'LATE'] },
+                },
+                orderBy: { dueDate: 'asc' },
+              },
+              maintenanceRequests: {
+                where: {
+                  status: { in: ['OPEN', 'IN_PROGRESS'] },
+                },
+              },
+              serviceRequests: {
+                where: {
+                  status: { notIn: ['COMPLETED', 'CANCELLED'] },
+                },
+              },
+            },
+          },
+          tenants: {
+            include: {
+              rentPayments: {
+                where: {
+                  status: { in: ['PENDING', 'LATE'] },
+                },
+              },
+            },
+          },
+        },
+      });
     }
 
     // Calculate totals
