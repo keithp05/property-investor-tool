@@ -1,47 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-
-// Helper to check if user is super admin
-async function isSuperAdmin(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-  return user?.role === 'SUPER_ADMIN';
-}
+import { verifyAdminSession } from '@/lib/admin-session';
 
 /**
  * GET /api/admin/stats
- * Get platform-wide statistics
+ * Get platform statistics for admin dashboard
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const isAdmin = await verifyAdminSession();
 
-    if (!session?.user) {
+    if (!isAdmin) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    
-    if (!(await isSuperAdmin(userId))) {
-      return NextResponse.json({ success: false, error: 'Access denied. Super Admin only.' }, { status: 403 });
-    }
-
-    // Get counts
+    // Get all stats in parallel
     const [
       totalUsers,
-      totalLandlords,
-      totalTenants,
-      totalPros,
+      landlordCount,
+      tenantCount,
+      proCount,
       totalProperties,
       totalApplications,
+      freeCount,
+      proTierCount,
+      enterpriseCount,
       activeSubscriptions,
-      freeUsers,
-      proUsers,
-      enterpriseUsers,
+      recentSignups,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: 'LANDLORD' } }),
@@ -49,39 +34,38 @@ export async function GET(request: NextRequest) {
       prisma.user.count({ where: { role: 'PRO' } }),
       prisma.property.count(),
       prisma.tenantApplication.count(),
-      prisma.user.count({ where: { subscriptionStatus: 'ACTIVE' } }),
       prisma.user.count({ where: { subscriptionTier: 'FREE' } }),
       prisma.user.count({ where: { subscriptionTier: 'PRO' } }),
       prisma.user.count({ where: { subscriptionTier: 'ENTERPRISE' } }),
+      prisma.user.count({ where: { subscriptionStatus: 'ACTIVE' } }),
+      prisma.user.count({ 
+        where: { 
+          createdAt: { 
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+          } 
+        } 
+      }),
     ]);
-
-    // Recent signups (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const recentSignups = await prisma.user.count({
-      where: { createdAt: { gte: thirtyDaysAgo } },
-    });
 
     return NextResponse.json({
       success: true,
       stats: {
         users: {
           total: totalUsers,
-          landlords: totalLandlords,
-          tenants: totalTenants,
-          pros: totalPros,
+          landlords: landlordCount,
+          tenants: tenantCount,
+          pros: proCount,
           recentSignups,
-        },
-        subscriptions: {
-          active: activeSubscriptions,
-          free: freeUsers,
-          pro: proUsers,
-          enterprise: enterpriseUsers,
         },
         platform: {
           totalProperties,
           totalApplications,
+        },
+        subscriptions: {
+          free: freeCount,
+          pro: proTierCount,
+          enterprise: enterpriseCount,
+          active: activeSubscriptions,
         },
       },
     });
@@ -89,7 +73,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Admin stats error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to get stats', details: error.message },
+      { success: false, error: 'Failed to get stats' },
       { status: 500 }
     );
   }

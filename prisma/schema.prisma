@@ -970,7 +970,7 @@ enum SettingType {
 model AdminAuditLog {
   id              String   @id @default(cuid())
   
-  adminId         String   // User ID of admin who performed action
+  adminId         String   // AdminUser ID who performed action
   adminEmail      String
   
   action          String   // e.g., "USER_SUSPENDED", "FEATURE_TOGGLED"
@@ -986,6 +986,67 @@ model AdminAuditLog {
   @@index([adminId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ============================================================================
+// ADMIN USERS (Separate from regular users)
+// ============================================================================
+
+model AdminUser {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String   // bcrypt hashed
+  name            String
+  role            AdminRole @default(SUPPORT)
+  
+  // Status
+  isActive        Boolean  @default(true)
+  lastLoginAt     DateTime?
+  loginCount      Int      @default(0)
+  
+  // MFA
+  mfaEnabled      Boolean  @default(false)
+  mfaSecret       String?
+  mfaBackupCodes  String[]
+  
+  // Password reset
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  
+  // Sessions
+  sessions        AdminSession[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String?  // AdminUser ID who created this admin
+  
+  @@index([email])
+}
+
+model AdminSession {
+  id              String   @id @default(cuid())
+  adminId         String
+  admin           AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
+  token           String   @unique
+  expiresAt       DateTime
+  
+  // Session metadata
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([adminId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+enum AdminRole {
+  SUPER_ADMIN  // Full access - can create other admins
+  ADMIN        // Full access to user/feature management
+  SUPPORT      // View-only access, can suspend users
+  BILLING      // Access to billing/subscription management only
 }
 
 enum SubscriptionTier {

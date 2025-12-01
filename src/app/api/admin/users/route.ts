@@ -1,34 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-
-// Helper to check if user is super admin
-async function isSuperAdmin(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-  return user?.role === 'SUPER_ADMIN';
-}
-
-// Helper to log admin actions
-async function logAdminAction(adminId: string, adminEmail: string, action: string, targetType?: string, targetId?: string, details?: any) {
-  try {
-    await prisma.adminAuditLog.create({
-      data: {
-        adminId,
-        adminEmail,
-        action,
-        targetType,
-        targetId,
-        details,
-      },
-    });
-  } catch (e) {
-    console.error('Failed to log admin action:', e);
-  }
-}
+import { verifyAdminSession } from '@/lib/admin-session';
 
 /**
  * GET /api/admin/users
@@ -36,16 +8,10 @@ async function logAdminAction(adminId: string, adminEmail: string, action: strin
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const isAdmin = await verifyAdminSession();
 
-    if (!session?.user) {
+    if (!isAdmin) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = (session.user as any).id;
-    
-    if (!(await isSuperAdmin(userId))) {
-      return NextResponse.json({ success: false, error: 'Access denied. Super Admin only.' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -186,17 +152,10 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const isAdmin = await verifyAdminSession();
 
-    if (!session?.user) {
+    if (!isAdmin) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const adminId = (session.user as any).id;
-    const adminEmail = session.user.email || '';
-    
-    if (!(await isSuperAdmin(adminId))) {
-      return NextResponse.json({ success: false, error: 'Access denied. Super Admin only.' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -288,14 +247,20 @@ export async function PATCH(request: NextRequest) {
     });
 
     // Log the action
-    await logAdminAction(
-      adminId,
-      adminEmail,
-      'USER_UPDATED',
-      'User',
-      userId,
-      { changes, newValues: updateData }
-    );
+    try {
+      await prisma.adminAuditLog.create({
+        data: {
+          adminId: 'system',
+          adminEmail: 'admin@rentaliq.com',
+          action: 'USER_UPDATED',
+          targetType: 'User',
+          targetId: userId,
+          details: { changes, newValues: updateData },
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log admin action:', e);
+    }
 
     return NextResponse.json({
       success: true,

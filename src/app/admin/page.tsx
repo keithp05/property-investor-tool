@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
-  Users, Building2, FileText, Briefcase, Crown, 
-  TrendingUp, ArrowUpRight, ArrowDownRight,
-  Loader2, AlertTriangle
+  Users, Building2, FileText, Crown, 
+  TrendingUp, Loader2, AlertTriangle
 } from 'lucide-react';
 
 interface Stats {
@@ -28,6 +28,7 @@ interface Stats {
 }
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -39,6 +40,13 @@ export default function AdminDashboard() {
   async function loadStats() {
     try {
       const response = await fetch('/api/admin/stats');
+      
+      if (response.status === 401) {
+        // Not authenticated, redirect to login
+        router.push('/admin/login');
+        return;
+      }
+      
       const data = await response.json();
       
       if (data.success) {

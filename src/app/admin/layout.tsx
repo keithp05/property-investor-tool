@@ -1,30 +1,50 @@
-import { ReactNode } from 'react';
-import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { cookies } from 'next/headers';
+import { jwtVerify } from 'jose';
 import AdminSidebar from './components/AdminSidebar';
 
-export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const session = await getServerSession(authOptions);
+const JWT_SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || 'fallback-secret');
 
-  // Redirect if not logged in
-  if (!session?.user) {
-    redirect('/login');
+async function verifyAdminSession() {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('admin_session')?.value;
+
+    if (!sessionToken) {
+      return null;
+    }
+
+    const { payload } = await jwtVerify(sessionToken, JWT_SECRET);
+    
+    if (payload.type !== 'admin_session' || !payload.mfaVerified) {
+      return null;
+    }
+
+    return {
+      mfaVerified: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export default async function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await verifyAdminSession();
+
+  // No valid session - render children without sidebar
+  // The login page will handle authentication
+  if (!session) {
+    return <>{children}</>;
   }
 
-  // Check if user is super admin
-  const userRole = (session.user as any).role;
-  if (userRole !== 'SUPER_ADMIN') {
-    redirect('/dashboard?error=unauthorized');
-  }
-
+  // Valid session - show full admin layout with sidebar
   return (
     <div className="min-h-screen bg-gray-950 flex">
-      {/* Sidebar */}
-      <AdminSidebar user={session.user} />
-      
-      {/* Main Content */}
-      <main className="flex-1 ml-64">
+      <AdminSidebar />
+      <main className="flex-1 overflow-auto">
         {children}
       </main>
     </div>
