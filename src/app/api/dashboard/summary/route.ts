@@ -41,11 +41,6 @@ export async function GET(request: NextRequest) {
                 status: { in: ['OPEN', 'IN_PROGRESS'] },
               },
             },
-            serviceRequests: {
-              where: {
-                status: { notIn: ['COMPLETED', 'CANCELLED'] },
-              },
-            },
           },
         },
       },
@@ -73,11 +68,6 @@ export async function GET(request: NextRequest) {
               maintenanceRequests: {
                 where: {
                   status: { in: ['OPEN', 'IN_PROGRESS'] },
-                },
-              },
-              serviceRequests: {
-                where: {
-                  status: { notIn: ['COMPLETED', 'CANCELLED'] },
                 },
               },
             },
@@ -132,7 +122,6 @@ export async function GET(request: NextRequest) {
         hasTenant: !!property.currentTenancy,
         pendingPayments: property.rentPayments.length,
         openMaintenanceRequests: property.maintenanceRequests.length,
-        activeServiceRequests: property.serviceRequests.length,
       };
     });
 
@@ -167,22 +156,6 @@ export async function GET(request: NextRequest) {
           propertyAddress: p.address,
           requestId: mr.id,
           createdAt: mr.createdAt,
-        });
-      });
-    });
-
-    // Active service requests
-    landlordProfile.properties.forEach((p) => {
-      p.serviceRequests.forEach((sr) => {
-        pendingActions.push({
-          type: 'SERVICE_REQUEST',
-          priority: sr.priority === 'EMERGENCY' ? 'HIGH' : sr.priority === 'HIGH' ? 'MEDIUM' : 'LOW',
-          title: sr.title,
-          description: `Service request at ${p.address} - ${sr.status}`,
-          propertyId: p.id,
-          propertyAddress: p.address,
-          requestId: sr.id,
-          status: sr.status,
         });
       });
     });
