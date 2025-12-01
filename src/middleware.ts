@@ -15,10 +15,17 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.includes(pathname) ||
                         pathname.startsWith('/_next') ||
                         pathname.startsWith('/api/') || // Allow ALL API routes (they handle their own auth)
-                        pathname.startsWith('/apply/'); // Allow tenant application links (guest access)
+                        pathname.startsWith('/apply/') || // Allow tenant application links (guest access)
+                        pathname.startsWith('/admin/login') || // Admin login has its own auth
+                        pathname.startsWith('/auth/'); // Auth pages
 
   // Allow public routes
   if (isPublicRoute) {
+    return NextResponse.next();
+  }
+
+  // Admin routes use their own JWT auth, not NextAuth
+  if (pathname.startsWith('/admin')) {
     return NextResponse.next();
   }
 
