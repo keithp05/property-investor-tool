@@ -21,6 +21,7 @@ interface Property {
   monthlyRent: number | null;
   marketRent: number | null;
   estimatedValue: number | null;
+  currentValue: number | null;
   purchasePrice: number | null;
   purchaseDate: Date | null;
   monthlyMortgage: number | null;
@@ -53,8 +54,10 @@ export default function PropertyDetailsPage() {
   const [editForm, setEditForm] = useState({
     monthlyRent: '',
     estimatedValue: '',
+    currentValue: '',
     purchasePrice: '',
     mortgage: '',
+    mortgageBalance: '',
   });
   const [saving, setSaving] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
@@ -82,8 +85,10 @@ export default function PropertyDetailsPage() {
       setEditForm({
         monthlyRent: property.monthlyRent?.toString() || '',
         estimatedValue: property.estimatedValue?.toString() || '',
+        currentValue: property.currentValue?.toString() || property.estimatedValue?.toString() || '',
         purchasePrice: property.purchasePrice?.toString() || '',
         mortgage: property.monthlyMortgage?.toString() || '',
+        mortgageBalance: property.mortgageBalance?.toString() || '',
       });
     }
   }, [property, showEditModal]);
@@ -195,8 +200,10 @@ export default function PropertyDetailsPage() {
         body: JSON.stringify({
           monthlyRent: editForm.monthlyRent ? parseFloat(editForm.monthlyRent) : null,
           estimatedValue: editForm.estimatedValue ? parseFloat(editForm.estimatedValue) : null,
+          currentValue: editForm.currentValue ? parseFloat(editForm.currentValue) : null,
           purchasePrice: editForm.purchasePrice ? parseFloat(editForm.purchasePrice) : null,
           mortgage: editForm.mortgage ? parseFloat(editForm.mortgage) : null,
+          mortgageBalance: editForm.mortgageBalance ? parseFloat(editForm.mortgageBalance) : null,
         }),
       });
 
@@ -654,21 +661,22 @@ export default function PropertyDetailsPage() {
                     </div>
                   </div>
 
-                  {/* Estimated Value */}
+                  {/* Current Value */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Estimated Value
+                      Current Property Value
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-gray-500">$</span>
                       <input
                         type="number"
-                        value={editForm.estimatedValue}
-                        onChange={(e) => setEditForm({ ...editForm, estimatedValue: e.target.value })}
+                        value={editForm.currentValue}
+                        onChange={(e) => setEditForm({ ...editForm, currentValue: e.target.value })}
                         placeholder="350000"
                         className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </div>
+                    <p className="text-xs text-gray-500 mt-1">Used for dashboard net worth calculation</p>
                   </div>
 
                   {/* Purchase Price */}
@@ -686,6 +694,24 @@ export default function PropertyDetailsPage() {
                         className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </div>
+                  </div>
+
+                  {/* Mortgage Balance */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Current Mortgage Balance
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        value={editForm.mortgageBalance}
+                        onChange={(e) => setEditForm({ ...editForm, mortgageBalance: e.target.value })}
+                        placeholder="240000"
+                        className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Amount still owed on the mortgage</p>
                   </div>
 
                   {/* Monthly Mortgage */}

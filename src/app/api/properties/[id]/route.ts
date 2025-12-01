@@ -156,11 +156,20 @@ export async function PUT(
     if (body.estimatedValue !== undefined) {
       updateData.estimatedValue = body.estimatedValue;
     }
+    if (body.currentValue !== undefined) {
+      updateData.currentValue = body.currentValue;
+    }
     if (body.purchasePrice !== undefined) {
       updateData.purchasePrice = body.purchasePrice;
     }
     if (body.mortgage !== undefined) {
       updateData.monthlyMortgage = body.mortgage;
+    }
+    if (body.mortgageBalance !== undefined) {
+      updateData.mortgageBalance = body.mortgageBalance;
+    }
+    if (body.mortgageRate !== undefined) {
+      updateData.mortgageRate = body.mortgageRate;
     }
 
     // Update the property and fetch with all relations
