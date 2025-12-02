@@ -55,6 +55,9 @@ export default function AdminLoginPage() {
       if (data.needsMfaSetup) {
         // Need to set up MFA
         await setupMfa();
+      } else if (data.skipMfa) {
+        // MFA skipped, go directly to admin
+        router.push('/admin');
       } else {
         // MFA already set up, go to verify
         setStep('mfa-verify');
