@@ -40,7 +40,14 @@ export default function AdminLoginPage() {
 
       if (!data.success) {
         // Show debug info if available
-        const debugInfo = data.debug ? ` (env: ${data.debug.envVarSet}, expected: ${data.debug.expectedLength}, received: ${data.debug.receivedLength})` : '';
+        let debugInfo = '';
+        if (data.debug) {
+          if (typeof data.debug === 'string') {
+            debugInfo = ` (${data.debug})`;
+          } else {
+            debugInfo = ` (env: ${data.debug.envVarSet}, expected: ${data.debug.expectedLength}, received: ${data.debug.receivedLength})`;
+          }
+        }
         setError((data.error || 'Login failed') + debugInfo);
         return;
       }

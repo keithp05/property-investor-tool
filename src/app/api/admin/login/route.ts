@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Admin login error:', error);
     return NextResponse.json(
-      { success: false, error: 'Login failed' },
+      { success: false, error: 'Login failed', debug: error.message },
       { status: 500 }
     );
   }
