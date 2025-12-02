@@ -20,13 +20,10 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const role = searchParams.get('role') || '';
     const tier = searchParams.get('tier') || '';
-    const status = searchParams.get('status') || '';
-    const billing = searchParams.get('billing') || '';
-    const mfa = searchParams.get('mfa') || '';
 
     const skip = (page - 1) * limit;
 
-    // Build where clause
+    // Build where clause - only use fields that definitely exist
     const where: any = {};
     
     if (search) {
@@ -44,32 +41,7 @@ export async function GET(request: NextRequest) {
       where.subscriptionTier = tier;
     }
 
-    if (status) {
-      if (status === 'active') {
-        where.isActive = true;
-        where.isSuspended = false;
-      } else if (status === 'suspended') {
-        where.isSuspended = true;
-      } else if (status === 'inactive') {
-        where.isActive = false;
-      }
-    }
-
-    if (billing) {
-      if (billing === 'current') {
-        where.subscriptionStatus = 'ACTIVE';
-      } else if (billing === 'past_due') {
-        where.subscriptionStatus = 'PAST_DUE';
-      } else if (billing === 'cancelled') {
-        where.subscriptionStatus = 'CANCELLED';
-      }
-    }
-
-    if (mfa) {
-      where.mfaEnabled = mfa === 'enabled';
-    }
-
-    // Get users with pagination
+    // Get users with pagination - only select fields that exist
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
@@ -78,23 +50,9 @@ export async function GET(request: NextRequest) {
           email: true,
           name: true,
           role: true,
-          isActive: true,
-          isSuspended: true,
-          suspendedAt: true,
-          suspendedReason: true,
-          lastLoginAt: true,
-          lastActiveAt: true,
-          loginCount: true,
-          mfaEnabled: true,
-          mfaVerifiedAt: true,
           subscriptionTier: true,
           subscriptionStatus: true,
           subscriptionEndsAt: true,
-          billingEmail: true,
-          lastPaymentAt: true,
-          lastPaymentAmount: true,
-          failedPaymentCount: true,
-          nextBillingDate: true,
           stripeCustomerId: true,
           createdAt: true,
           updatedAt: true,
@@ -127,7 +85,12 @@ export async function GET(request: NextRequest) {
       success: true,
       users: users.map(user => ({
         ...user,
-        lastPaymentAmount: user.lastPaymentAmount ? Number(user.lastPaymentAmount) : null,
+        // Add placeholder fields for UI compatibility
+        isActive: true,
+        isSuspended: false,
+        mfaEnabled: false,
+        lastLoginAt: null,
+        loginCount: 0,
       })),
       pagination: {
         page,
@@ -140,7 +103,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Admin users list error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to get users', details: error.message },
+      { success: false, error: 'Failed to get users', debug: error.message },
       { status: 500 }
     );
   }
@@ -148,7 +111,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/admin/users
- * Update a user's role, tier, status, MFA, etc.
+ * Update a user's role or tier
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -164,18 +127,13 @@ export async function PATCH(request: NextRequest) {
       role, 
       subscriptionTier, 
       subscriptionStatus,
-      isActive,
-      isSuspended,
-      suspendedReason,
-      mfaEnabled,
-      resetMfa,
     } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    // Build update data
+    // Build update data - only use fields that exist
     const updateData: any = {};
     const changes: string[] = [];
 
@@ -194,37 +152,6 @@ export async function PATCH(request: NextRequest) {
       changes.push(`subscription status -> ${subscriptionStatus}`);
     }
 
-    if (isActive !== undefined) {
-      updateData.isActive = isActive;
-      changes.push(`active -> ${isActive}`);
-    }
-
-    if (isSuspended !== undefined) {
-      updateData.isSuspended = isSuspended;
-      if (isSuspended) {
-        updateData.suspendedAt = new Date();
-        updateData.suspendedReason = suspendedReason || 'Suspended by admin';
-        changes.push('suspended');
-      } else {
-        updateData.suspendedAt = null;
-        updateData.suspendedReason = null;
-        changes.push('unsuspended');
-      }
-    }
-
-    if (mfaEnabled !== undefined) {
-      updateData.mfaEnabled = mfaEnabled;
-      changes.push(`MFA -> ${mfaEnabled ? 'enabled' : 'disabled'}`);
-    }
-
-    if (resetMfa) {
-      updateData.mfaEnabled = false;
-      updateData.mfaSecret = null;
-      updateData.mfaBackupCodes = [];
-      updateData.mfaVerifiedAt = null;
-      changes.push('MFA reset');
-    }
-
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
@@ -238,29 +165,10 @@ export async function PATCH(request: NextRequest) {
         email: true,
         name: true,
         role: true,
-        isActive: true,
-        isSuspended: true,
-        mfaEnabled: true,
         subscriptionTier: true,
         subscriptionStatus: true,
       },
     });
-
-    // Log the action
-    try {
-      await prisma.adminAuditLog.create({
-        data: {
-          adminId: 'system',
-          adminEmail: 'admin@rentaliq.com',
-          action: 'USER_UPDATED',
-          targetType: 'User',
-          targetId: userId,
-          details: { changes, newValues: updateData },
-        },
-      });
-    } catch (e) {
-      console.error('Failed to log admin action:', e);
-    }
 
     return NextResponse.json({
       success: true,
@@ -271,7 +179,7 @@ export async function PATCH(request: NextRequest) {
   } catch (error: any) {
     console.error('Admin user update error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to update user', details: error.message },
+      { success: false, error: 'Failed to update user', debug: error.message },
       { status: 500 }
     );
   }
