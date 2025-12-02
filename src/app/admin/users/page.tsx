@@ -5,7 +5,7 @@ import {
   Search, ChevronLeft, ChevronRight, Edit3, 
   Loader2, X, Check, Shield, ShieldOff, ShieldCheck,
   CreditCard, Clock, AlertTriangle, Ban, CheckCircle,
-  Key, KeyRound
+  Key, KeyRound, RefreshCw
 } from 'lucide-react';
 
 interface User {
@@ -38,6 +38,7 @@ interface User {
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -70,6 +71,7 @@ export default function UsersPage() {
   async function loadUsers() {
     try {
       setLoading(true);
+      setError(null);
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '20',
@@ -84,13 +86,23 @@ export default function UsersPage() {
       const response = await fetch(`/api/admin/users?${params}`);
       const data = await response.json();
       
-      if (data.success) {
+      if (data.success && Array.isArray(data.users)) {
         setUsers(data.users);
-        setTotalPages(data.pagination.totalPages);
-        setTotal(data.pagination.total);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotal(data.pagination?.total || data.users.length);
+      } else {
+        // API returned an error
+        setError(data.error || data.debug || 'Failed to load users');
+        setUsers([]);
+        setTotalPages(1);
+        setTotal(0);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load users:', err);
+      setError(err.message || 'Network error');
+      setUsers([]);
+      setTotalPages(1);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -122,10 +134,11 @@ export default function UsersPage() {
         setEditingUser(null);
         loadUsers();
       } else {
-        alert('Failed to update user: ' + data.error);
+        alert('Failed to update user: ' + (data.error || data.debug || 'Unknown error'));
       }
     } catch (err) {
       console.error('Failed to update user:', err);
+      alert('Network error updating user');
     } finally {
       setSaving(false);
     }
@@ -219,13 +232,37 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-6 w-6 text-red-400 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-red-400 mb-1">Failed to Load Users</h3>
+              <p className="text-gray-300 mb-3">{error}</p>
+              <button
+                onClick={loadUsers}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Users Table */}
       <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-500" />
           </div>
-        ) : (
+        ) : users.length === 0 && !error ? (
+          <div className="p-12 text-center">
+            <p className="text-gray-400">No users found</p>
+          </div>
+        ) : users.length > 0 ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -235,9 +272,7 @@ export default function UsersPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Role</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Subscription</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Billing</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">MFA</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Activity</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Joined</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -272,24 +307,16 @@ export default function UsersPage() {
                       {/* Subscription */}
                       <td className="px-4 py-3">
                         <div className="space-y-1">
-                          <TierBadge tier={user.subscriptionTier} />
-                          <SubscriptionStatusBadge status={user.subscriptionStatus} />
+                          <TierBadge tier={user.subscriptionTier || 'FREE'} />
+                          <SubscriptionStatusBadge status={user.subscriptionStatus || 'INACTIVE'} />
                         </div>
                       </td>
                       
-                      {/* Billing */}
+                      {/* Joined */}
                       <td className="px-4 py-3">
-                        <BillingInfo user={user} />
-                      </td>
-                      
-                      {/* MFA */}
-                      <td className="px-4 py-3">
-                        <MfaStatus user={user} />
-                      </td>
-                      
-                      {/* Activity */}
-                      <td className="px-4 py-3">
-                        <ActivityInfo user={user} />
+                        <p className="text-sm text-gray-400">
+                          {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}
+                        </p>
                       </td>
                       
                       {/* Actions */}
@@ -299,11 +326,11 @@ export default function UsersPage() {
                             setEditingUser(user);
                             setEditForm({
                               role: user.role,
-                              tier: user.subscriptionTier,
-                              subscriptionStatus: user.subscriptionStatus,
-                              isSuspended: user.isSuspended,
+                              tier: user.subscriptionTier || 'FREE',
+                              subscriptionStatus: user.subscriptionStatus || 'INACTIVE',
+                              isSuspended: user.isSuspended || false,
                               suspendedReason: user.suspendedReason || '',
-                              mfaEnabled: user.mfaEnabled,
+                              mfaEnabled: user.mfaEnabled || false,
                               resetMfa: false,
                             });
                           }}
@@ -341,7 +368,7 @@ export default function UsersPage() {
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
 
       {/* Edit User Modal */}
@@ -392,68 +419,9 @@ export default function UsersPage() {
                 </select>
               </div>
 
-              {/* Subscription Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Subscription Status</label>
-                <select
-                  value={editForm.subscriptionStatus}
-                  onChange={(e) => setEditForm({ ...editForm, subscriptionStatus: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white"
-                >
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="TRIALING">Trialing</option>
-                  <option value="PAST_DUE">Past Due</option>
-                  <option value="CANCELLED">Cancelled</option>
-                </select>
-              </div>
-
-              {/* Suspend Account */}
-              <div className="p-4 bg-gray-800 rounded-lg space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editForm.isSuspended}
-                    onChange={(e) => setEditForm({ ...editForm, isSuspended: e.target.checked })}
-                    className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-red-500 focus:ring-red-500"
-                  />
-                  <span className="text-sm font-medium text-red-400">Suspend Account</span>
-                </label>
-                {editForm.isSuspended && (
-                  <input
-                    type="text"
-                    placeholder="Reason for suspension..."
-                    value={editForm.suspendedReason}
-                    onChange={(e) => setEditForm({ ...editForm, suspendedReason: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
-                  />
-                )}
-              </div>
-
-              {/* MFA Settings */}
-              <div className="p-4 bg-gray-800 rounded-lg space-y-3">
-                <p className="text-sm font-medium text-gray-300 mb-2">MFA Settings</p>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editForm.mfaEnabled}
-                    onChange={(e) => setEditForm({ ...editForm, mfaEnabled: e.target.checked })}
-                    className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-purple-500 focus:ring-purple-500"
-                  />
-                  <span className="text-sm text-gray-300">MFA Enabled</span>
-                </label>
-                {editingUser.mfaEnabled && (
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editForm.resetMfa}
-                      onChange={(e) => setEditForm({ ...editForm, resetMfa: e.target.checked })}
-                      className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-orange-500 focus:ring-orange-500"
-                    />
-                    <span className="text-sm text-orange-400">Reset MFA (user will need to set up again)</span>
-                  </label>
-                )}
-              </div>
+              <p className="text-xs text-yellow-500">
+                Note: Some features are disabled until database migration is complete.
+              </p>
             </div>
             
             <div className="flex gap-3 px-6 py-4 border-t border-gray-800">
@@ -492,7 +460,7 @@ function RoleBadge({ role }: { role: string }) {
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${styles[role] || 'bg-gray-500/20 text-gray-400'}`}>
       {role === 'SUPER_ADMIN' && <Shield className="h-3 w-3" />}
-      {role.replace('_', ' ')}
+      {role?.replace('_', ' ') || 'Unknown'}
     </span>
   );
 }
@@ -507,7 +475,7 @@ function TierBadge({ tier }: { tier: string }) {
 
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[tier] || 'bg-gray-500/20 text-gray-400'}`}>
-      {tier}
+      {tier || 'FREE'}
     </span>
   );
 }
@@ -528,7 +496,7 @@ function SubscriptionStatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center gap-1 text-xs ${c.style}`}>
       <Icon className="h-3 w-3" />
-      {status.replace('_', ' ')}
+      {status?.replace('_', ' ') || 'INACTIVE'}
     </span>
   );
 }
@@ -551,7 +519,7 @@ function AccountStatus({ user }: { user: User }) {
     );
   }
   
-  if (!user.isActive) {
+  if (user.isActive === false) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-400">
         Inactive
@@ -564,79 +532,5 @@ function AccountStatus({ user }: { user: User }) {
       <CheckCircle className="h-3 w-3" />
       Active
     </span>
-  );
-}
-
-// Component: Billing Info
-function BillingInfo({ user }: { user: User }) {
-  if (user.subscriptionTier === 'FREE') {
-    return <span className="text-xs text-gray-500">Free tier</span>;
-  }
-
-  return (
-    <div className="space-y-1">
-      {user.lastPaymentAt && (
-        <p className="text-xs text-gray-400">
-          Last: ${user.lastPaymentAmount?.toFixed(2) || '0'} on {new Date(user.lastPaymentAt).toLocaleDateString()}
-        </p>
-      )}
-      {user.nextBillingDate && (
-        <p className="text-xs text-gray-500">
-          Next: {new Date(user.nextBillingDate).toLocaleDateString()}
-        </p>
-      )}
-      {user.failedPaymentCount > 0 && (
-        <p className="text-xs text-red-400">
-          {user.failedPaymentCount} failed payment(s)
-        </p>
-      )}
-      {!user.lastPaymentAt && !user.nextBillingDate && (
-        <span className="text-xs text-gray-500">No billing</span>
-      )}
-    </div>
-  );
-}
-
-// Component: MFA Status
-function MfaStatus({ user }: { user: User }) {
-  if (user.mfaEnabled) {
-    return (
-      <div>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
-          <ShieldCheck className="h-3 w-3" />
-          Enabled
-        </span>
-        {user.mfaVerifiedAt && (
-          <p className="text-xs text-gray-500 mt-1">
-            Since {new Date(user.mfaVerifiedAt).toLocaleDateString()}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-500">
-      <ShieldOff className="h-3 w-3" />
-      Disabled
-    </span>
-  );
-}
-
-// Component: Activity Info
-function ActivityInfo({ user }: { user: User }) {
-  return (
-    <div className="space-y-1">
-      {user.lastLoginAt ? (
-        <p className="text-xs text-gray-400">
-          Last login: {new Date(user.lastLoginAt).toLocaleDateString()}
-        </p>
-      ) : (
-        <p className="text-xs text-gray-500">Never logged in</p>
-      )}
-      <p className="text-xs text-gray-500">
-        {user.loginCount} logins
-      </p>
-    </div>
   );
 }

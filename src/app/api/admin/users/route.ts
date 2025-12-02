@@ -4,7 +4,7 @@ import { verifyAdminSession } from '@/lib/admin-session';
 
 /**
  * GET /api/admin/users
- * List all users with filtering and pagination
+ * List all users with pagination
  */
 export async function GET(request: NextRequest) {
   try {
@@ -17,50 +17,36 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const search = searchParams.get('search') || '';
-    const role = searchParams.get('role') || '';
 
     const skip = (page - 1) * limit;
 
-    // Build where clause - only use basic fields
-    const where: any = {};
-    
-    if (search) {
-      where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { name: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-    
-    if (role) {
-      where.role = role;
-    }
-
-    // Use raw query to only get basic fields
-    const users = await prisma.$queryRaw`
-      SELECT 
-        id, email, name, role, "createdAt", "updatedAt",
-        "subscriptionTier", "subscriptionStatus", "stripeCustomerId"
-      FROM "User"
-      ORDER BY "createdAt" DESC
-      LIMIT ${limit} OFFSET ${skip}
-    `;
-
-    const countResult = await prisma.$queryRaw`SELECT COUNT(*) as count FROM "User"`;
-    const total = Number((countResult as any)[0].count);
+    // Simplest possible query - just the User table basics
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count(),
+    ]);
 
     return NextResponse.json({
       success: true,
-      users: (users as any[]).map(user => ({
+      users: users.map(user => ({
         ...user,
+        // Add placeholder fields for UI
         isActive: true,
         isSuspended: false,
         mfaEnabled: false,
-        lastLoginAt: null,
-        loginCount: 0,
-        landlordProfile: null,
-        tenantProfile: null,
-        proProfile: null,
+        subscriptionTier: 'FREE',
+        subscriptionStatus: 'INACTIVE',
       })),
       pagination: {
         page,
@@ -81,7 +67,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/admin/users
- * Update a user's role or tier
+ * Update a user's role
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -92,46 +78,31 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, role, subscriptionTier, subscriptionStatus } = body;
+    const { userId, role } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    const changes: string[] = [];
-    
-    // Build SET clause dynamically
-    const updates: string[] = [];
-    
-    if (role !== undefined) {
-      updates.push(`role = '${role}'`);
-      changes.push(`role -> ${role}`);
-    }
-    
-    if (subscriptionTier !== undefined) {
-      updates.push(`"subscriptionTier" = '${subscriptionTier}'`);
-      changes.push(`tier -> ${subscriptionTier}`);
-    }
-    
-    if (subscriptionStatus !== undefined) {
-      updates.push(`"subscriptionStatus" = '${subscriptionStatus}'`);
-      changes.push(`status -> ${subscriptionStatus}`);
+    if (!role) {
+      return NextResponse.json({ success: false, error: 'Role is required' }, { status: 400 });
     }
 
-    if (updates.length === 0) {
-      return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
-    }
-
-    // Use raw query for update
-    await prisma.$executeRawUnsafe(`
-      UPDATE "User" 
-      SET ${updates.join(', ')}, "updatedAt" = NOW()
-      WHERE id = '${userId}'
-    `);
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { role },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+      },
+    });
 
     return NextResponse.json({
       success: true,
-      message: `User updated: ${changes.join(', ')}`,
+      user: updatedUser,
+      message: `User role updated to ${role}`,
     });
 
   } catch (error: any) {
