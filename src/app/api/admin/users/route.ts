@@ -19,11 +19,10 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const search = searchParams.get('search') || '';
     const role = searchParams.get('role') || '';
-    const tier = searchParams.get('tier') || '';
 
     const skip = (page - 1) * limit;
 
-    // Build where clause - only use fields that definitely exist
+    // Build where clause - only use basic fields
     const where: any = {};
     
     if (search) {
@@ -36,61 +35,32 @@ export async function GET(request: NextRequest) {
     if (role) {
       where.role = role;
     }
-    
-    if (tier) {
-      where.subscriptionTier = tier;
-    }
 
-    // Get users with pagination - only select fields that exist
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          subscriptionTier: true,
-          subscriptionStatus: true,
-          subscriptionEndsAt: true,
-          stripeCustomerId: true,
-          createdAt: true,
-          updatedAt: true,
-          landlordProfile: {
-            select: {
-              id: true,
-              company: true,
-              _count: { select: { properties: true } },
-            },
-          },
-          tenantProfile: {
-            select: { id: true },
-          },
-          proProfile: {
-            select: {
-              id: true,
-              businessName: true,
-              isVerified: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.user.count({ where }),
-    ]);
+    // Use raw query to only get basic fields
+    const users = await prisma.$queryRaw`
+      SELECT 
+        id, email, name, role, "createdAt", "updatedAt",
+        "subscriptionTier", "subscriptionStatus", "stripeCustomerId"
+      FROM "User"
+      ORDER BY "createdAt" DESC
+      LIMIT ${limit} OFFSET ${skip}
+    `;
+
+    const countResult = await prisma.$queryRaw`SELECT COUNT(*) as count FROM "User"`;
+    const total = Number((countResult as any)[0].count);
 
     return NextResponse.json({
       success: true,
-      users: users.map(user => ({
+      users: (users as any[]).map(user => ({
         ...user,
-        // Add placeholder fields for UI compatibility
         isActive: true,
         isSuspended: false,
         mfaEnabled: false,
         lastLoginAt: null,
         loginCount: 0,
+        landlordProfile: null,
+        tenantProfile: null,
+        proProfile: null,
       })),
       pagination: {
         page,
@@ -122,57 +92,45 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { 
-      userId, 
-      role, 
-      subscriptionTier, 
-      subscriptionStatus,
-    } = body;
+    const { userId, role, subscriptionTier, subscriptionStatus } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    // Build update data - only use fields that exist
-    const updateData: any = {};
     const changes: string[] = [];
-
+    
+    // Build SET clause dynamically
+    const updates: string[] = [];
+    
     if (role !== undefined) {
-      updateData.role = role;
+      updates.push(`role = '${role}'`);
       changes.push(`role -> ${role}`);
     }
     
     if (subscriptionTier !== undefined) {
-      updateData.subscriptionTier = subscriptionTier;
+      updates.push(`"subscriptionTier" = '${subscriptionTier}'`);
       changes.push(`tier -> ${subscriptionTier}`);
     }
     
     if (subscriptionStatus !== undefined) {
-      updateData.subscriptionStatus = subscriptionStatus;
-      changes.push(`subscription status -> ${subscriptionStatus}`);
+      updates.push(`"subscriptionStatus" = '${subscriptionStatus}'`);
+      changes.push(`status -> ${subscriptionStatus}`);
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (updates.length === 0) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
 
-    // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        subscriptionTier: true,
-        subscriptionStatus: true,
-      },
-    });
+    // Use raw query for update
+    await prisma.$executeRawUnsafe(`
+      UPDATE "User" 
+      SET ${updates.join(', ')}, "updatedAt" = NOW()
+      WHERE id = '${userId}'
+    `);
 
     return NextResponse.json({
       success: true,
-      user: updatedUser,
       message: `User updated: ${changes.join(', ')}`,
     });
 
