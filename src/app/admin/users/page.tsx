@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Loader2, RefreshCw, AlertTriangle, Edit3, Trash2, 
   Plus, X, Check, Key, UserPlus, Copy, CheckCircle, Shield,
   Building2, Users, CreditCard, Eye, ChevronDown, Search,
-  Filter, Crown, Home
+  Filter, Crown, Home, Settings
 } from 'lucide-react';
 
 interface User {
@@ -439,6 +440,13 @@ export default function UsersPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </button>
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          className="p-2 text-gray-400 hover:text-green-400 hover:bg-gray-800 rounded-lg"
+                          title="Manage Features"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Link>
                         <button
                           onClick={() => {
                             setEditingUser(user);
@@ -610,10 +618,17 @@ export default function UsersPage() {
             <div className="flex gap-3 px-6 py-4 border-t border-gray-800">
               <button
                 onClick={() => setViewingUser(null)}
-                className="flex-1 px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700"
+                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700"
               >
                 Close
               </button>
+              <Link
+                href={`/admin/users/${viewingUser.id}`}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Manage Features
+              </Link>
               <button
                 onClick={() => {
                   setViewingUser(null);
