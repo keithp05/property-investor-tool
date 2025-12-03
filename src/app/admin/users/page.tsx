@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Loader2, RefreshCw, AlertTriangle, Edit3, Trash2, 
-  Plus, X, Check, Key, UserPlus
+  Plus, X, Check, Key, UserPlus, Copy, CheckCircle, Shield
 } from 'lucide-react';
 
 interface User {
@@ -17,6 +17,7 @@ interface User {
   subscriptionStatus?: string;
   isActive?: boolean;
   isSuspended?: boolean;
+  mfaEnabled?: boolean;
 }
 
 export default function UsersPage() {
@@ -31,6 +32,10 @@ export default function UsersPage() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  
+  // Password reset result
+  const [newPassword, setNewPassword] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Edit form
   const [editForm, setEditForm] = useState({ role: '', resetPassword: false });
@@ -89,8 +94,14 @@ export default function UsersPage() {
       const data = await response.json();
       
       if (data.success) {
-        setActionMessage(data.message || 'User updated successfully');
+        // Check if password was reset
+        if (data.newPassword) {
+          setNewPassword({ email: editingUser.email, password: data.newPassword });
+        } else {
+          setActionMessage(data.message || 'User updated successfully');
+        }
         setEditingUser(null);
+        setEditForm({ role: '', resetPassword: false });
         loadUsers();
       } else {
         setActionMessage(`Error: ${data.error || data.debug}`);
@@ -159,6 +170,14 @@ export default function UsersPage() {
     }
   }
 
+  function copyPassword() {
+    if (newPassword) {
+      navigator.clipboard.writeText(newPassword.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -216,6 +235,7 @@ export default function UsersPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">User</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Role</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">MFA</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Joined</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
               </tr>
@@ -247,6 +267,15 @@ export default function UsersPage() {
                       {user.isSuspended ? 'Suspended' : user.isActive === false ? 'Inactive' : 'Active'}
                     </span>
                   </td>
+                  <td className="px-4 py-3">
+                    {user.mfaEnabled ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                        <Shield className="h-3 w-3" /> Enabled
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-500">Disabled</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-400">
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}
                   </td>
@@ -277,6 +306,57 @@ export default function UsersPage() {
           </table>
         )}
       </div>
+
+      {/* New Password Modal */}
+      {newPassword && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 max-w-md w-full">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-400" />
+                Password Reset Complete
+              </h2>
+              <button onClick={() => setNewPassword(null)} className="text-gray-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-gray-400 text-sm mb-4">
+                The password for <span className="text-white font-medium">{newPassword.email}</span> has been reset.
+              </p>
+              
+              <div className="bg-gray-800 rounded-lg p-4">
+                <p className="text-xs text-gray-500 mb-2">New Password:</p>
+                <div className="flex items-center gap-3">
+                  <code className="flex-1 text-lg font-mono text-green-400 bg-gray-900 px-3 py-2 rounded">
+                    {newPassword.password}
+                  </code>
+                  <button
+                    onClick={copyPassword}
+                    className={`p-2 rounded-lg transition-colors ${copied ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >
+                    {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+              
+              <p className="text-yellow-500 text-xs mt-4">
+                ⚠️ Make sure to save this password - it won't be shown again!
+              </p>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-800">
+              <button
+                onClick={() => setNewPassword(null)}
+                className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit User Modal */}
       {editingUser && (

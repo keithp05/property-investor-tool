@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         ...user,
         isActive: true,
         isSuspended: false,
+        mfaEnabled: false, // Will be real once migration is done
         subscriptionTier: 'FREE',
         subscriptionStatus: 'INACTIVE',
       })),
@@ -160,6 +161,7 @@ export async function PATCH(request: NextRequest) {
 
     const updateData: any = {};
     const changes: string[] = [];
+    let newPassword: string | null = null;
 
     if (role) {
       updateData.role = role;
@@ -167,10 +169,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (resetPassword) {
-      // Generate a random password
-      const newPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-2).toUpperCase();
+      // Generate a random password: 10 chars + 2 uppercase
+      newPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-2).toUpperCase() + '!';
       updateData.password = await bcrypt.hash(newPassword, 12);
-      changes.push(`password reset to: ${newPassword}`);
+      changes.push('password reset');
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -192,6 +194,7 @@ export async function PATCH(request: NextRequest) {
       success: true,
       user: updatedUser,
       message: changes.join(', '),
+      newPassword: newPassword, // Return new password if reset was requested
     });
 
   } catch (error: any) {
