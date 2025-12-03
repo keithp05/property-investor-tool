@@ -5,7 +5,6 @@ import bcrypt from 'bcryptjs';
 
 const getJwtSecret = () => {
   const secret = process.env.NEXTAUTH_SECRET;
-  console.log('NEXTAUTH_SECRET available:', !!secret, 'length:', secret?.length);
   return new TextEncoder().encode(secret || 'fallback-secret-key-for-development');
 };
 
@@ -19,9 +18,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { token, password } = body;
-
-    console.log('Token received:', token ? `${token.substring(0, 20)}...` : 'NONE');
-    console.log('Password received:', password ? `${password.length} chars` : 'NONE');
 
     if (!token || !password) {
       return NextResponse.json(
@@ -45,7 +41,6 @@ export async function POST(request: NextRequest) {
       const result = await jwtVerify(token, JWT_SECRET);
       payload = result.payload;
       console.log('Token verified successfully');
-      console.log('Payload:', JSON.stringify(payload));
     } catch (e: any) {
       console.error('JWT verification failed:', e.code, e.message);
       if (e.code === 'ERR_JWT_EXPIRED') {
@@ -54,28 +49,19 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (e.code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED') {
-        return NextResponse.json(
-          { success: false, error: 'Invalid reset link. The link may have been corrupted or tampered with.' },
-          { status: 400 }
-        );
-      }
       return NextResponse.json(
-        { success: false, error: `Invalid reset link: ${e.code || e.message}` },
+        { success: false, error: 'Invalid or expired reset link. Please request a new one.' },
         { status: 400 }
       );
     }
 
     // Validate token type
     if (payload.type !== 'password_reset' || !payload.userId) {
-      console.log('Invalid token type or missing userId');
       return NextResponse.json(
-        { success: false, error: 'Invalid reset token type' },
+        { success: false, error: 'Invalid reset token' },
         { status: 400 }
       );
     }
-
-    console.log('Looking up user:', payload.userId);
 
     // Find user
     const user = await prisma.user.findUnique({
@@ -84,18 +70,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      console.log('User not found');
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
       );
     }
 
-    console.log('User found:', user.email);
+    console.log('Resetting password for:', user.email);
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(password, 12);
-    console.log('Password hashed, length:', hashedPassword.length);
 
     // Update password
     await prisma.user.update({
@@ -103,7 +87,7 @@ export async function POST(request: NextRequest) {
       data: { password: hashedPassword },
     });
 
-    console.log('Password updated successfully for:', user.email);
+    console.log('Password reset successful for:', user.email);
     console.log('==============================');
 
     return NextResponse.json({
@@ -113,9 +97,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Reset password error:', error);
-    console.error('Error stack:', error.stack);
     return NextResponse.json(
-      { success: false, error: 'Failed to reset password', debug: error.message },
+      { success: false, error: 'Failed to reset password. Please try again.' },
       { status: 500 }
     );
   }
