@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         ...user,
         isActive: true,
         isSuspended: false,
-        mfaEnabled: false, // Will be real once migration is done
+        mfaEnabled: false,
         subscriptionTier: 'FREE',
         subscriptionStatus: 'INACTIVE',
       })),
@@ -93,9 +93,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -111,7 +114,7 @@ export async function POST(request: NextRequest) {
     // Create user
     const newUser = await prisma.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         name: name || null,
         password: hashedPassword,
         role: role || 'TENANT',
@@ -159,6 +162,21 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
+    // First, verify the user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, password: true },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    console.log('=== PASSWORD RESET DEBUG ===');
+    console.log('User ID:', userId);
+    console.log('User Email:', existingUser.email);
+    console.log('Current password hash length:', existingUser.password?.length);
+
     const updateData: any = {};
     const changes: string[] = [];
     let newPassword: string | null = null;
@@ -169,16 +187,28 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (resetPassword) {
-      // Generate a random password: 10 chars + 2 uppercase
-      newPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-2).toUpperCase() + '!';
-      updateData.password = await bcrypt.hash(newPassword, 12);
+      // Generate a strong random password
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let password = '';
+      for (let i = 0; i < 12; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      newPassword = password + '!';
+      
+      // Hash the password
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      updateData.password = hashedPassword;
       changes.push('password reset');
+      
+      console.log('New password generated:', newPassword);
+      console.log('New password hash length:', hashedPassword.length);
     }
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
 
+    // Update the user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -187,14 +217,24 @@ export async function PATCH(request: NextRequest) {
         email: true,
         name: true,
         role: true,
+        password: true, // Select to verify update
       },
     });
 
+    console.log('Updated password hash length:', updatedUser.password?.length);
+    console.log('Update successful for:', updatedUser.email);
+    console.log('=============================');
+
     return NextResponse.json({
       success: true,
-      user: updatedUser,
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        role: updatedUser.role,
+      },
       message: changes.join(', '),
-      newPassword: newPassword, // Return new password if reset was requested
+      newPassword: newPassword,
     });
 
   } catch (error: any) {
@@ -235,7 +275,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // Delete user (this will cascade delete related records based on schema)
+    // Delete user
     await prisma.user.delete({
       where: { id: userId },
     });
@@ -248,10 +288,9 @@ export async function DELETE(request: NextRequest) {
   } catch (error: any) {
     console.error('Admin user delete error:', error);
     
-    // Handle foreign key constraint errors
     if (error.code === 'P2003') {
       return NextResponse.json(
-        { success: false, error: 'Cannot delete user: they have related records (properties, applications, etc.)' },
+        { success: false, error: 'Cannot delete user: they have related records' },
         { status: 400 }
       );
     }

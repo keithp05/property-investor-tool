@@ -15,27 +15,46 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          console.log('Login failed: Missing email or password');
           return null;
         }
 
+        // Normalize email to lowercase
+        const normalizedEmail = credentials.email.toLowerCase().trim();
+        
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: normalizedEmail },
           include: {
             landlordProfile: true,
             tenantProfile: true,
           },
         });
 
-        if (!user || !user.password) {
+        if (!user) {
+          console.log('Login failed: User not found for email:', normalizedEmail);
+          return null;
+        }
+        
+        if (!user.password) {
+          console.log('Login failed: No password set for user:', normalizedEmail);
           return null;
         }
 
         const passwordMatch = await bcrypt.compare(credentials.password, user.password);
+        
+        console.log('Login attempt:', { 
+          email: normalizedEmail, 
+          passwordMatch,
+          hashedPasswordLength: user.password?.length,
+        });
 
         if (!passwordMatch) {
+          console.log('Login failed: Password mismatch for:', normalizedEmail);
           return null;
         }
 
+        console.log('Login successful for:', normalizedEmail);
+        
         return {
           id: user.id,
           email: user.email,

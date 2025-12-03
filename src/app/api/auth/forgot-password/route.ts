@@ -19,17 +19,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Find user
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: normalizedEmail },
       select: { id: true, email: true, name: true },
     });
 
-    // Always return success to prevent email enumeration
+    // If user not found, still return success (prevent email enumeration)
+    // but don't generate a token
     if (!user) {
+      console.log('Forgot password: User not found for email:', normalizedEmail);
       return NextResponse.json({
         success: true,
         message: 'If an account exists with this email, you will receive a password reset link.',
+        // No resetUrl since user doesn't exist
       });
     }
 
@@ -48,21 +54,22 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amplifyapp.com';
     const resetUrl = `${baseUrl}/auth/reset-password?token=${resetToken}`;
 
-    // TODO: Send email with resetUrl
-    // For now, log it (in production, use a proper email service like SendGrid, Resend, etc.)
-    console.log('=== PASSWORD RESET REQUEST ===');
+    console.log('=== PASSWORD RESET LINK ===');
     console.log('User:', user.email);
     console.log('Reset URL:', resetUrl);
-    console.log('==============================');
+    console.log('===========================');
 
-    // In development or for testing, we can return the URL
-    // In production, remove the resetUrl from response
-    const isDev = process.env.NODE_ENV !== 'production';
+    // TODO: In production, send email instead of returning URL
+    // For now, we return the URL so users can test the feature
+    // Once you set up an email service (SendGrid, Resend, AWS SES), 
+    // remove resetUrl from response and send it via email instead
     
     return NextResponse.json({
       success: true,
       message: 'If an account exists with this email, you will receive a password reset link.',
-      ...(isDev && { resetUrl, note: 'Development mode: URL shown for testing' }),
+      // Always show the reset URL until email is configured
+      resetUrl: resetUrl,
+      note: 'Email sending not configured. Use the link below to reset your password.',
     });
 
   } catch (error: any) {
