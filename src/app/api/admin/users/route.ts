@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 
 /**
  * GET /api/admin/users
- * List all users with pagination
+ * List all users with pagination and relationships
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,35 +18,150 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
+    const includeRelations = searchParams.get('includeRelations') === 'true';
 
     const skip = (page - 1) * limit;
 
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.user.count(),
-    ]);
+    // Build the query based on what columns exist
+    let users;
+    let total;
 
-    return NextResponse.json({
-      success: true,
-      users: users.map(user => ({
-        ...user,
+    try {
+      // Try to get users with all fields and relations
+      [users, total] = await Promise.all([
+        prisma.user.findMany({
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            createdAt: true,
+            subscriptionTier: true,
+            subscriptionStatus: true,
+            // These might not exist yet
+            // isActive: true,
+            // isSuspended: true,
+            // mfaEnabled: true,
+            ...(includeRelations && {
+              landlordProfile: {
+                select: {
+                  id: true,
+                  company: true,
+                  _count: {
+                    select: {
+                      properties: true,
+                      tenants: true,
+                    }
+                  }
+                }
+              },
+              tenantProfile: {
+                select: {
+                  id: true,
+                  currentTenancy: {
+                    select: {
+                      id: true,
+                      monthlyRent: true,
+                      property: {
+                        select: {
+                          address: true,
+                          city: true,
+                          state: true,
+                        }
+                      },
+                      landlord: {
+                        select: {
+                          user: {
+                            select: {
+                              name: true,
+                              email: true,
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+            }),
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.user.count(),
+      ]);
+    } catch (e) {
+      // Fallback to simpler query if relations fail
+      console.log('Falling back to simple user query');
+      [users, total] = await Promise.all([
+        prisma.user.findMany({
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            createdAt: true,
+            subscriptionTier: true,
+            subscriptionStatus: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.user.count(),
+      ]);
+    }
+
+    // Transform the data for the frontend
+    const transformedUsers = users.map((user: any) => {
+      const transformed: any = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        createdAt: user.createdAt,
+        subscriptionTier: user.subscriptionTier || 'FREE',
+        subscriptionStatus: user.subscriptionStatus || 'INACTIVE',
         isActive: true,
         isSuspended: false,
         mfaEnabled: false,
-        subscriptionTier: 'FREE',
-        subscriptionStatus: 'INACTIVE',
-      })),
+      };
+
+      // Add landlord profile data
+      if (user.landlordProfile) {
+        transformed.landlordProfile = {
+          id: user.landlordProfile.id,
+          company: user.landlordProfile.company,
+          propertyCount: user.landlordProfile._count?.properties || 0,
+          tenantCount: user.landlordProfile._count?.tenants || 0,
+        };
+      }
+
+      // Add tenant profile data
+      if (user.tenantProfile) {
+        transformed.tenantProfile = {
+          id: user.tenantProfile.id,
+          currentTenancy: user.tenantProfile.currentTenancy ? {
+            propertyAddress: [
+              user.tenantProfile.currentTenancy.property?.address,
+              user.tenantProfile.currentTenancy.property?.city,
+              user.tenantProfile.currentTenancy.property?.state
+            ].filter(Boolean).join(', '),
+            landlordName: user.tenantProfile.currentTenancy.landlord?.user?.name || 'Unknown',
+            landlordEmail: user.tenantProfile.currentTenancy.landlord?.user?.email || '',
+            monthlyRent: user.tenantProfile.currentTenancy.monthlyRent ? 
+              parseFloat(user.tenantProfile.currentTenancy.monthlyRent.toString()) : null,
+          } : null,
+        };
+      }
+
+      return transformed;
+    });
+
+    return NextResponse.json({
+      success: true,
+      users: transformedUsers,
       pagination: {
         page,
         limit,
@@ -93,10 +208,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalize email
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
@@ -108,10 +221,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
     const newUser = await prisma.user.create({
       data: {
         email: normalizedEmail,
@@ -145,7 +256,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * PATCH /api/admin/users
- * Update a user's role or reset password
+ * Update a user's role, subscription, or reset password
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -156,26 +267,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, role, resetPassword } = body;
+    const { userId, role, resetPassword, subscriptionTier, subscriptionStatus } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    // First, verify the user exists
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, password: true },
+      select: { id: true, email: true },
     });
 
     if (!existingUser) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
-
-    console.log('=== PASSWORD RESET DEBUG ===');
-    console.log('User ID:', userId);
-    console.log('User Email:', existingUser.email);
-    console.log('Current password hash length:', existingUser.password?.length);
 
     const updateData: any = {};
     const changes: string[] = [];
@@ -183,11 +288,20 @@ export async function PATCH(request: NextRequest) {
 
     if (role) {
       updateData.role = role;
-      changes.push(`role changed to ${role}`);
+      changes.push(`role → ${role}`);
+    }
+
+    if (subscriptionTier) {
+      updateData.subscriptionTier = subscriptionTier;
+      changes.push(`tier → ${subscriptionTier}`);
+    }
+
+    if (subscriptionStatus) {
+      updateData.subscriptionStatus = subscriptionStatus;
+      changes.push(`status → ${subscriptionStatus}`);
     }
 
     if (resetPassword) {
-      // Generate a strong random password
       const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       let password = '';
       for (let i = 0; i < 12; i++) {
@@ -195,20 +309,15 @@ export async function PATCH(request: NextRequest) {
       }
       newPassword = password + '!';
       
-      // Hash the password
       const hashedPassword = await bcrypt.hash(newPassword, 12);
       updateData.password = hashedPassword;
       changes.push('password reset');
-      
-      console.log('New password generated:', newPassword);
-      console.log('New password hash length:', hashedPassword.length);
     }
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
 
-    // Update the user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -217,22 +326,16 @@ export async function PATCH(request: NextRequest) {
         email: true,
         name: true,
         role: true,
-        password: true, // Select to verify update
+        subscriptionTier: true,
+        subscriptionStatus: true,
       },
     });
 
-    console.log('Updated password hash length:', updatedUser.password?.length);
-    console.log('Update successful for:', updatedUser.email);
-    console.log('=============================');
+    console.log(`User ${existingUser.email} updated:`, changes.join(', '));
 
     return NextResponse.json({
       success: true,
-      user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        name: updatedUser.name,
-        role: updatedUser.role,
-      },
+      user: updatedUser,
       message: changes.join(', '),
       newPassword: newPassword,
     });
@@ -265,7 +368,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    // Get user info before deletion
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { email: true, name: true },
@@ -275,7 +377,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // Delete user
     await prisma.user.delete({
       where: { id: userId },
     });
@@ -290,7 +391,7 @@ export async function DELETE(request: NextRequest) {
     
     if (error.code === 'P2003') {
       return NextResponse.json(
-        { success: false, error: 'Cannot delete user: they have related records' },
+        { success: false, error: 'Cannot delete user: they have related records (properties, tenants, etc.)' },
         { status: 400 }
       );
     }
