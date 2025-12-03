@@ -27,7 +27,7 @@ function ResetPasswordForm() {
             </div>
             <h1 className="text-2xl font-bold text-white mb-3">Invalid Link</h1>
             <p className="text-gray-400 mb-6">
-              This password reset link is invalid or has expired.
+              This password reset link is invalid or missing.
             </p>
             <Link
               href="/auth/forgot-password"
@@ -72,10 +72,14 @@ function ResetPasswordForm() {
           router.push('/login');
         }, 3000);
       } else {
+        // Show the actual error message
         setError(data.error || 'Failed to reset password');
+        if (data.debug) {
+          console.error('Debug info:', data.debug);
+        }
       }
-    } catch (err) {
-      setError('Network error. Please try again.');
+    } catch (err: any) {
+      setError(`Network error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -114,7 +118,8 @@ function ResetPasswordForm() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="p-4 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm">
-                {error}
+                <p className="font-medium mb-1">Error</p>
+                <p>{error}</p>
               </div>
             )}
 
