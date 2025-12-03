@@ -44,12 +44,12 @@ function isFeatureEnabledByTier(featureKey: string, userTier: string): boolean {
 }
 
 /**
- * GET /api/admin/users/[userId]/features
- * Get features for a specific user
+ * GET /api/admin/users/[userId]
+ * Get user details and features
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const isAdmin = await verifyAdminSession();
@@ -58,7 +58,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
 
     // Get user with their subscription tier
     const user = await prisma.user.findUnique({
@@ -77,19 +77,18 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // Try to get user feature overrides from a JSON field or separate table
-    // For now, we'll use defaults based on tier
+    // Get user feature overrides from the database
     let featureOverrides: Record<string, boolean> = {};
     
-    // TODO: Once migration is done, fetch from UserFeatureOverride table
-    // try {
-    //   const overrides = await prisma.userFeatureOverride.findMany({
-    //     where: { userId },
-    //   });
-    //   featureOverrides = Object.fromEntries(overrides.map(o => [o.featureKey, o.enabled]));
-    // } catch (e) {
-    //   console.log('UserFeatureOverride table not available');
-    // }
+    try {
+      const overrides = await prisma.userFeatureOverride.findMany({
+        where: { userId },
+      });
+      featureOverrides = Object.fromEntries(overrides.map(o => [o.featureKey, o.enabled]));
+    } catch (e: any) {
+      // Table might not exist yet if migration hasn't run
+      console.log('UserFeatureOverride table not available:', e.message);
+    }
 
     // Build feature list with enabled status
     const features = ALL_FEATURES.map(feature => {
@@ -117,7 +116,6 @@ export async function GET(
         subscriptionStatus: user.subscriptionStatus,
       },
       features,
-      note: 'Feature overrides require database migration. Currently showing tier-based defaults.',
     });
 
   } catch (error: any) {
@@ -130,12 +128,12 @@ export async function GET(
 }
 
 /**
- * PATCH /api/admin/users/[userId]/features
+ * PATCH /api/admin/users/[userId]
  * Update feature overrides for a user
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const isAdmin = await verifyAdminSession();
@@ -144,7 +142,7 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const { featureKey, enabled } = await request.json();
 
     if (!featureKey || typeof enabled !== 'boolean') {
@@ -157,6 +155,93 @@ export async function PATCH(
     // Verify user exists
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      select: { id: true, email: true, subscriptionTier: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    // Check if this matches the tier default - if so, remove the override
+    const enabledByTier = isFeatureEnabledByTier(featureKey, user.subscriptionTier);
+    
+    if (enabled === enabledByTier) {
+      // Remove the override since it matches the default
+      try {
+        await prisma.userFeatureOverride.delete({
+          where: {
+            userId_featureKey: { userId, featureKey }
+          }
+        });
+        console.log(`Removed override for ${user.email} - ${featureKey} (matches tier default)`);
+      } catch (e: any) {
+        // Override might not exist, that's fine
+        if (e.code !== 'P2025') {
+          throw e;
+        }
+      }
+    } else {
+      // Upsert the override
+      await prisma.userFeatureOverride.upsert({
+        where: {
+          userId_featureKey: { userId, featureKey }
+        },
+        create: {
+          userId,
+          featureKey,
+          enabled,
+        },
+        update: {
+          enabled,
+        },
+      });
+      console.log(`Set override for ${user.email} - ${featureKey} = ${enabled}`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Feature ${featureKey} set to ${enabled} for ${user.email}`,
+    });
+
+  } catch (error: any) {
+    console.error('Update user features error:', error);
+    
+    // Check if it's a table doesn't exist error
+    if (error.code === 'P2021' || error.message?.includes('does not exist')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Feature overrides table not found. Please run database migrations.',
+        debug: error.message,
+      }, { status: 500 });
+    }
+    
+    return NextResponse.json(
+      { success: false, error: 'Failed to update user features', debug: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/admin/users/[userId]
+ * Remove all feature overrides for a user (reset to tier defaults)
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ userId: string }> }
+) {
+  try {
+    const isAdmin = await verifyAdminSession();
+
+    if (!isAdmin) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { userId } = await params;
+
+    // Verify user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       select: { id: true, email: true },
     });
 
@@ -164,26 +249,22 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // TODO: Once migration is done, save to UserFeatureOverride table
-    // await prisma.userFeatureOverride.upsert({
-    //   where: { userId_featureKey: { userId, featureKey } },
-    //   create: { userId, featureKey, enabled },
-    //   update: { enabled },
-    // });
+    // Delete all overrides for this user
+    const result = await prisma.userFeatureOverride.deleteMany({
+      where: { userId }
+    });
 
-    // For now, return a message indicating the limitation
-    console.log(`Feature override requested: ${user.email} - ${featureKey} = ${enabled}`);
+    console.log(`Removed ${result.count} feature overrides for ${user.email}`);
 
     return NextResponse.json({
       success: true,
-      message: `Feature ${featureKey} set to ${enabled} for ${user.email}`,
-      warning: 'Feature overrides require database migration. This change will not persist until migration is complete.',
+      message: `Removed ${result.count} feature overrides for ${user.email}`,
     });
 
   } catch (error: any) {
-    console.error('Update user features error:', error);
+    console.error('Delete user features error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to update user features', debug: error.message },
+      { success: false, error: 'Failed to reset user features', debug: error.message },
       { status: 500 }
     );
   }

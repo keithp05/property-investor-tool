@@ -59,6 +59,7 @@ model User {
   tenantProfile   TenantProfile?
   proProfile      ProProfile?
   tenantApplications TenantApplication[]
+  featureOverrides UserFeatureOverride[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -1392,4 +1393,26 @@ enum LenderType {
   PRIVATE_INVESTOR
   CROWDFUNDING
   OTHER
+}
+
+// ============================================================================
+// USER FEATURE OVERRIDES (Per-user feature control)
+// ============================================================================
+
+model UserFeatureOverride {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  featureKey      String   // e.g., "lenders", "pro_marketplace", "quickbooks_sync"
+  enabled         Boolean  // true = force enabled, false = force disabled
+  
+  // Audit
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String?  // Admin who set the override
+  
+  @@unique([userId, featureKey])
+  @@index([userId])
+  @@index([featureKey])
 }

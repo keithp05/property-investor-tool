@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Loader2, ArrowLeft, Check, X, AlertTriangle, 
-  Crown, Shield, Zap, Package, ToggleLeft, ToggleRight,
+  Crown, Shield, Zap, Package, RotateCcw,
   User, Building2, CreditCard, RefreshCw
 } from 'lucide-react';
 
@@ -39,6 +39,7 @@ export default function UserFeaturesPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [features, setFeatures] = useState<Feature[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -62,9 +63,6 @@ export default function UserFeaturesPage() {
       if (data.success) {
         setUser(data.user);
         setFeatures(data.features);
-        if (data.note) {
-          setMessage({ type: 'warning', text: data.note });
-        }
       } else {
         setError(data.error || 'Failed to load user features');
       }
@@ -89,18 +87,9 @@ export default function UserFeaturesPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Update local state
-        setFeatures(features.map(f => 
-          f.key === featureKey 
-            ? { ...f, enabled, hasOverride: true, overrideValue: enabled }
-            : f
-        ));
-        
-        if (data.warning) {
-          setMessage({ type: 'warning', text: data.warning });
-        } else {
-          setMessage({ type: 'success', text: data.message });
-        }
+        // Reload to get the updated state
+        await loadUserFeatures();
+        setMessage({ type: 'success', text: data.message });
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to update feature' });
       }
@@ -111,9 +100,36 @@ export default function UserFeaturesPage() {
     }
   }
 
+  async function resetToDefaults() {
+    if (!confirm('Reset all feature overrides to tier defaults?')) return;
+    
+    setResetting(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadUserFeatures();
+        setMessage({ type: 'success', text: data.message });
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to reset features' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: `Network error: ${err.message}` });
+    } finally {
+      setResetting(false);
+    }
+  }
+
   const coreFeatures = features.filter(f => f.category === 'CORE');
   const premiumFeatures = features.filter(f => f.category === 'PREMIUM');
   const enterpriseFeatures = features.filter(f => f.category === 'ENTERPRISE');
+  const hasOverrides = features.some(f => f.hasOverride);
 
   if (loading) {
     return (
@@ -159,12 +175,24 @@ export default function UserFeaturesPage() {
           <h1 className="text-2xl font-bold text-white">User Features</h1>
           <p className="text-gray-400">Manage feature access for this user</p>
         </div>
-        <button
-          onClick={loadUserFeatures}
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg"
-        >
-          <RefreshCw className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {hasOverrides && (
+            <button
+              onClick={resetToDefaults}
+              disabled={resetting}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+            >
+              {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              Reset to Defaults
+            </button>
+          )}
+          <button
+            onClick={loadUserFeatures}
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg"
+          >
+            <RefreshCw className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* User Info Card */}
@@ -307,8 +335,10 @@ function FeatureRow({
         <div className="flex items-center gap-2">
           <p className="text-white font-medium">{feature.name}</p>
           {feature.hasOverride && (
-            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
-              Override
+            <span className={`px-1.5 py-0.5 text-xs rounded ${
+              feature.enabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+            }`}>
+              {feature.enabled ? 'Enabled' : 'Disabled'} Override
             </span>
           )}
         </div>
