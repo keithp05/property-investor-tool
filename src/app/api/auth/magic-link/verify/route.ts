@@ -51,15 +51,31 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get the user (only query basic columns)
-    const user = await prisma.user.findUnique({
-      where: { email: magicLink.email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-      },
-    });
+    // Get the user - try with MFA columns first
+    let user: any;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: magicLink.email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          isActive: true,
+          isSuspended: true,
+          mfaEnabled: true,
+        },
+      });
+    } catch (e) {
+      // Fall back to basic columns
+      user = await prisma.user.findUnique({
+        where: { email: magicLink.email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      });
+    }
 
     if (!user) {
       return NextResponse.json(
@@ -68,12 +84,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // MFA is disabled (columns don't exist in DB)
+    // Check active status if columns exist
+    if (user.isActive === false || user.isSuspended === true) {
+      return NextResponse.json(
+        { success: false, error: 'Account is not active' },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       email: user.email,
       name: user.name,
-      mfaRequired: false,
+      mfaRequired: user.mfaEnabled || false,
       token,
     });
 
@@ -92,7 +115,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { token } = await request.json();
+    const { token, mfaCode } = await request.json();
 
     if (!token) {
       return NextResponse.json(
@@ -135,24 +158,76 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the user (only query basic columns)
-    const user = await prisma.user.findUnique({
-      where: { email: magicLink.email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        subscriptionTier: true,
-        subscriptionStatus: true,
-      },
-    });
+    // Get the user - try with all columns
+    let user: any;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: magicLink.email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          subscriptionTier: true,
+          subscriptionStatus: true,
+          isActive: true,
+          isSuspended: true,
+          mfaEnabled: true,
+          mfaSecret: true,
+        },
+      });
+    } catch (e) {
+      // Fall back to basic columns
+      user = await prisma.user.findUnique({
+        where: { email: magicLink.email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          subscriptionTier: true,
+          subscriptionStatus: true,
+        },
+      });
+    }
 
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'Account not found' },
         { status: 400 }
       );
+    }
+
+    // Check active status if columns exist
+    if (user.isActive === false || user.isSuspended === true) {
+      return NextResponse.json(
+        { success: false, error: 'Account is not active' },
+        { status: 400 }
+      );
+    }
+
+    // If MFA is enabled, verify the code
+    if (user.mfaEnabled && user.mfaSecret) {
+      if (!mfaCode) {
+        return NextResponse.json(
+          { success: false, error: 'MFA code is required', mfaRequired: true },
+          { status: 400 }
+        );
+      }
+
+      // Verify TOTP code
+      const { authenticator } = await import('otplib');
+      const isValidCode = authenticator.verify({
+        token: mfaCode,
+        secret: user.mfaSecret,
+      });
+
+      if (!isValidCode) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid MFA code', mfaRequired: true },
+          { status: 400 }
+        );
+      }
     }
 
     // Mark magic link as used
@@ -164,7 +239,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update user's last login (if column exists, will fail silently if not)
+    // Update user's last login
     try {
       await prisma.user.update({
         where: { id: user.id },
@@ -174,7 +249,6 @@ export async function POST(request: NextRequest) {
         },
       });
     } catch (e) {
-      // lastLoginAt/loginCount might not exist, ignore
       console.log('Could not update login stats (columns may not exist)');
     }
 

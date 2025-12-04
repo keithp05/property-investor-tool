@@ -54,7 +54,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Update last login (may fail if columns don't exist)
+        // Update last login
         try {
           await prisma.user.update({
             where: { id: user.id },
@@ -121,22 +121,67 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Get the user (basic columns only)
-          const user = await prisma.user.findUnique({
-            where: { email: magicLink.email },
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              role: true,
-              subscriptionTier: true,
-              subscriptionStatus: true,
-            },
-          });
+          // Get the user - try with MFA columns
+          let user: any;
+          try {
+            user = await prisma.user.findUnique({
+              where: { email: magicLink.email },
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                subscriptionTier: true,
+                subscriptionStatus: true,
+                isActive: true,
+                isSuspended: true,
+                mfaEnabled: true,
+                mfaSecret: true,
+              },
+            });
+          } catch (e) {
+            // Fall back to basic columns
+            user = await prisma.user.findUnique({
+              where: { email: magicLink.email },
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                subscriptionTier: true,
+                subscriptionStatus: true,
+              },
+            });
+          }
 
           if (!user) {
             console.log('Magic link login failed: User not found');
             return null;
+          }
+
+          // Check active status if columns exist
+          if (user.isActive === false || user.isSuspended === true) {
+            console.log('Magic link login failed: User not active');
+            return null;
+          }
+
+          // If MFA is enabled, verify the code
+          if (user.mfaEnabled && user.mfaSecret) {
+            if (!credentials.mfaCode) {
+              console.log('Magic link login failed: MFA required but no code');
+              return null;
+            }
+
+            const { authenticator } = await import('otplib');
+            const isValidCode = authenticator.verify({
+              token: credentials.mfaCode,
+              secret: user.mfaSecret,
+            });
+
+            if (!isValidCode) {
+              console.log('Magic link login failed: Invalid MFA code');
+              return null;
+            }
           }
 
           // Mark magic link as used
@@ -148,7 +193,7 @@ export const authOptions: NextAuthOptions = {
             },
           });
 
-          // Update last login (may fail if columns don't exist)
+          // Update last login
           try {
             await prisma.user.update({
               where: { id: user.id },

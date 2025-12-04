@@ -11,7 +11,6 @@ const BASE_URL = process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amp
  */
 export async function POST(request: NextRequest) {
   try {
-    // Step 1: Parse request body
     const body = await request.json();
     const { email } = body;
 
@@ -24,15 +23,31 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Step 2: Check if user exists (only query basic columns that definitely exist)
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      select: { 
-        id: true, 
-        email: true, 
-        name: true,
-      },
-    });
+    // Check if user exists - try to get MFA status if columns exist
+    let user: any;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { 
+          id: true, 
+          email: true, 
+          name: true,
+          isActive: true,
+          isSuspended: true,
+          mfaEnabled: true,
+        },
+      });
+    } catch (e) {
+      // Columns might not exist yet, fall back to basic query
+      user = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { 
+          id: true, 
+          email: true, 
+          name: true,
+        },
+      });
+    }
 
     // Always return success to prevent email enumeration
     if (!user) {
@@ -42,17 +57,23 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Step 3: Generate token
+    // Check if user is active (if columns exist)
+    if (user.isActive === false || user.isSuspended === true) {
+      return NextResponse.json({
+        success: true,
+        message: 'If an account exists with this email, you will receive a sign-in link shortly.',
+      });
+    }
+
+    // Generate token
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 15 * 60 * 1000);
 
-    // Get IP and user agent
     const ipAddress = request.headers.get('x-forwarded-for') || 
                       request.headers.get('x-real-ip') || 
                       'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
-    // Step 4: Database operations
     // Delete existing unused magic links
     await (prisma as any).magicLink.deleteMany({
       where: { 
@@ -67,13 +88,13 @@ export async function POST(request: NextRequest) {
         email: normalizedEmail,
         token,
         expires,
-        mfaPending: false,
+        mfaPending: user.mfaEnabled || false,
         ipAddress,
         userAgent,
       },
     });
 
-    // Step 5: Send email
+    // Send email
     const magicLinkUrl = `${BASE_URL}/auth/magic-link/verify?token=${token}`;
 
     const emailResult = await sendMagicLinkEmail(
