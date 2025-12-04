@@ -67,8 +67,8 @@ export async function POST(request: NextRequest) {
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
     try {
+      // First, check if the MagicLink table exists by trying a simple query
       // Delete any existing unused magic links for this email
-      // Use prisma as any to avoid type issues during build
       await (prisma as any).magicLink.deleteMany({
         where: { 
           email: normalizedEmail,
@@ -87,13 +87,33 @@ export async function POST(request: NextRequest) {
           userAgent,
         },
       });
+      
+      console.log('Magic link created for:', normalizedEmail);
     } catch (dbError: any) {
-      // Handle case where MagicLink table doesn't exist yet
-      console.error('MagicLink database error:', dbError.message);
-      return NextResponse.json(
-        { success: false, error: 'Magic link feature is not yet available. Please use password login.' },
-        { status: 503 }
-      );
+      // Log the full error for debugging
+      console.error('MagicLink database error:', {
+        message: dbError.message,
+        code: dbError.code,
+        meta: dbError.meta,
+      });
+      
+      // Check if it's a "table doesn't exist" error
+      if (dbError.code === 'P2021' || 
+          dbError.message?.includes('does not exist') ||
+          dbError.message?.includes('relation') ||
+          dbError.message?.includes('MagicLink')) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Magic link feature is being set up. Please use password login for now.',
+            debug: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+          },
+          { status: 503 }
+        );
+      }
+      
+      // Re-throw other errors
+      throw dbError;
     }
 
     // Generate the magic link URL
@@ -108,6 +128,7 @@ export async function POST(request: NextRequest) {
 
     if (!emailResult.success) {
       console.error('Failed to send magic link email:', emailResult.error);
+      // Still return success to not leak info, but log the error
     }
 
     console.log('Magic link sent to:', normalizedEmail, 'MFA required:', user.mfaEnabled);
@@ -118,9 +139,18 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Magic link request error:', error);
+    console.error('Magic link request error:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
+    
     return NextResponse.json(
-      { success: false, error: 'Failed to process request' },
+      { 
+        success: false, 
+        error: 'Failed to process request. Please try password login.',
+        debug: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      },
       { status: 500 }
     );
   }
