@@ -3,11 +3,14 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { prisma } from './prisma';
+import { authenticator } from 'otplib';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   providers: [
+    // Traditional password login
     CredentialsProvider({
+      id: 'credentials',
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
@@ -53,6 +56,15 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Update last login
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            lastLoginAt: new Date(),
+            loginCount: { increment: 1 },
+          },
+        });
+
         console.log('Login successful for:', normalizedEmail);
         
         return {
@@ -63,6 +75,111 @@ export const authOptions: NextAuthOptions = {
           subscriptionTier: user.subscriptionTier,
           subscriptionStatus: user.subscriptionStatus,
         };
+      },
+    }),
+    
+    // Magic link login
+    CredentialsProvider({
+      id: 'magic-link',
+      name: 'Magic Link',
+      credentials: {
+        token: { label: 'Token', type: 'text' },
+        mfaCode: { label: 'MFA Code', type: 'text' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.token) {
+          console.log('Magic link login failed: No token');
+          return null;
+        }
+
+        try {
+          // Find the magic link
+          const magicLink = await prisma.magicLink.findUnique({
+            where: { token: credentials.token },
+          });
+
+          if (!magicLink) {
+            console.log('Magic link login failed: Invalid token');
+            return null;
+          }
+
+          // Check if already used
+          if (magicLink.used) {
+            console.log('Magic link login failed: Token already used');
+            return null;
+          }
+
+          // Check if expired
+          if (new Date() > magicLink.expires) {
+            console.log('Magic link login failed: Token expired');
+            return null;
+          }
+
+          // Get the user
+          const user = await prisma.user.findUnique({
+            where: { email: magicLink.email },
+          });
+
+          if (!user || !user.isActive || user.isSuspended) {
+            console.log('Magic link login failed: User not found or inactive');
+            return null;
+          }
+
+          // If MFA is enabled, verify the code
+          if (user.mfaEnabled) {
+            if (!credentials.mfaCode) {
+              console.log('Magic link login failed: MFA required but no code provided');
+              return null;
+            }
+
+            if (!user.mfaSecret) {
+              console.log('Magic link login failed: MFA not properly configured');
+              return null;
+            }
+
+            const isValidCode = authenticator.verify({
+              token: credentials.mfaCode,
+              secret: user.mfaSecret,
+            });
+
+            if (!isValidCode) {
+              console.log('Magic link login failed: Invalid MFA code');
+              return null;
+            }
+          }
+
+          // Mark magic link as used
+          await prisma.magicLink.update({
+            where: { token: credentials.token },
+            data: {
+              used: true,
+              usedAt: new Date(),
+            },
+          });
+
+          // Update last login
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              lastLoginAt: new Date(),
+              loginCount: { increment: 1 },
+            },
+          });
+
+          console.log('Magic link login successful for:', user.email);
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            subscriptionTier: user.subscriptionTier,
+            subscriptionStatus: user.subscriptionStatus,
+          };
+        } catch (error) {
+          console.error('Magic link authorize error:', error);
+          return null;
+        }
       },
     }),
   ],

@@ -4,11 +4,90 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@resend.dev';
 const APP_NAME = 'RealEstate Investor';
+const BASE_URL = process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amplifyapp.com';
 
 interface EmailResult {
   success: boolean;
   error?: string;
   id?: string;
+}
+
+/**
+ * Send a magic link email for passwordless login
+ */
+export async function sendMagicLinkEmail(
+  to: string,
+  magicLinkUrl: string,
+  userName?: string
+): Promise<EmailResult> {
+  if (!process.env.RESEND_API_KEY) {
+    console.log('RESEND_API_KEY not configured - skipping email');
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [to],
+      subject: `Sign in to ${APP_NAME}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f5; margin: 0; padding: 40px 20px;">
+          <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 32px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🔐 ${APP_NAME}</h1>
+            </div>
+            <div style="padding: 32px;">
+              <h2 style="color: #1f2937; margin: 0 0 16px;">Sign In Request</h2>
+              <p style="color: #4b5563; line-height: 1.6; margin: 0 0 24px;">
+                Hi${userName ? ` ${userName}` : ''},
+              </p>
+              <p style="color: #4b5563; line-height: 1.6; margin: 0 0 24px;">
+                Click the button below to securely sign in to your account. No password needed!
+              </p>
+              <a href="${magicLinkUrl}" 
+                 style="display: block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 16px 24px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 16px; margin: 0 0 24px;">
+                ✨ Sign In Now
+              </a>
+              <div style="background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 16px; margin: 0 0 24px;">
+                <p style="color: #92400e; font-size: 14px; margin: 0; font-weight: 500;">
+                  ⏱️ This link expires in 15 minutes
+                </p>
+              </div>
+              <p style="color: #9ca3af; font-size: 14px; line-height: 1.6; margin: 0;">
+                If you didn't request this sign in link, you can safely ignore this email. Someone may have typed your email address by mistake.
+              </p>
+            </div>
+            <div style="background: #f9fafb; padding: 24px; border-top: 1px solid #e5e7eb;">
+              <p style="color: #9ca3af; font-size: 12px; margin: 0 0 8px; text-align: center;">
+                Having trouble with the button? Copy and paste this link:
+              </p>
+              <p style="color: #6b7280; font-size: 11px; word-break: break-all; margin: 0; text-align: center;">
+                ${magicLinkUrl}
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    if (error) {
+      console.error('Email send error:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('Magic link email sent to:', to, 'id:', data?.id);
+    return { success: true, id: data?.id };
+  } catch (err: any) {
+    console.error('Email error:', err);
+    return { success: false, error: err.message };
+  }
 }
 
 /**
@@ -55,7 +134,7 @@ export async function sendPasswordResetEmail(
               <p style="color: #4b5563; line-height: 1.6; margin: 0 0 24px;">
                 Please log in and change your password immediately for security.
               </p>
-              <a href="${process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amplifyapp.com'}/login" 
+              <a href="${BASE_URL}/login" 
                  style="display: block; background: #7c3aed; color: white; text-decoration: none; padding: 14px 24px; border-radius: 8px; text-align: center; font-weight: 600;">
                 Log In Now
               </a>
@@ -201,7 +280,7 @@ export async function sendWelcomeEmail(
               <p style="color: #4b5563; line-height: 1.6; margin: 0 0 24px;">
                 Please change your password after your first login.
               </p>
-              <a href="${process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amplifyapp.com'}/login" 
+              <a href="${BASE_URL}/login" 
                  style="display: block; background: #7c3aed; color: white; text-decoration: none; padding: 14px 24px; border-radius: 8px; text-align: center; font-weight: 600;">
                 Log In Now
               </a>
