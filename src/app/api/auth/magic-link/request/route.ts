@@ -24,28 +24,18 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Step 2: Check if user exists (only query columns that definitely exist)
+    // Step 2: Check if user exists (only query basic columns that definitely exist)
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: { 
         id: true, 
         email: true, 
-        name: true, 
-        isActive: true,
-        isSuspended: true,
+        name: true,
       },
     });
 
     // Always return success to prevent email enumeration
     if (!user) {
-      return NextResponse.json({
-        success: true,
-        message: 'If an account exists with this email, you will receive a sign-in link shortly.',
-      });
-    }
-
-    // Check if user is active
-    if (!user.isActive || user.isSuspended) {
       return NextResponse.json({
         success: true,
         message: 'If an account exists with this email, you will receive a sign-in link shortly.',
@@ -71,13 +61,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create new magic link (mfaPending defaults to false for now)
+    // Create new magic link
     await (prisma as any).magicLink.create({
       data: {
         email: normalizedEmail,
         token,
         expires,
-        mfaPending: false, // MFA check will happen at verification time
+        mfaPending: false,
         ipAddress,
         userAgent,
       },

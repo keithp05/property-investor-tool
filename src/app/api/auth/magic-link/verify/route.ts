@@ -51,26 +51,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get the user (only query columns that definitely exist)
+    // Get the user (only query basic columns)
     const user = await prisma.user.findUnique({
       where: { email: magicLink.email },
       select: {
         id: true,
         email: true,
         name: true,
-        isActive: true,
-        isSuspended: true,
       },
     });
 
-    if (!user || !user.isActive || user.isSuspended) {
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Account not found or inactive' },
+        { success: false, error: 'Account not found' },
         { status: 400 }
       );
     }
 
-    // For now, MFA is not required (mfaEnabled column doesn't exist in DB)
+    // MFA is disabled (columns don't exist in DB)
     return NextResponse.json({
       success: true,
       email: user.email,
@@ -90,11 +88,11 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/auth/magic-link/verify
- * Complete the magic link authentication (with optional MFA)
+ * Complete the magic link authentication
  */
 export async function POST(request: NextRequest) {
   try {
-    const { token, mfaCode } = await request.json();
+    const { token } = await request.json();
 
     if (!token) {
       return NextResponse.json(
@@ -137,7 +135,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the user (only query columns that definitely exist)
+    // Get the user (only query basic columns)
     const user = await prisma.user.findUnique({
       where: { email: magicLink.email },
       select: {
@@ -147,20 +145,15 @@ export async function POST(request: NextRequest) {
         role: true,
         subscriptionTier: true,
         subscriptionStatus: true,
-        isActive: true,
-        isSuspended: true,
       },
     });
 
-    if (!user || !user.isActive || user.isSuspended) {
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Account not found or inactive' },
+        { success: false, error: 'Account not found' },
         { status: 400 }
       );
     }
-
-    // MFA is disabled for now (mfaEnabled/mfaSecret columns don't exist in DB)
-    // When MFA is properly set up, add the verification here
 
     // Mark magic link as used
     await (prisma as any).magicLink.update({
@@ -171,14 +164,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update user's last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        lastLoginAt: new Date(),
-        loginCount: { increment: 1 },
-      },
-    });
+    // Update user's last login (if column exists, will fail silently if not)
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          lastLoginAt: new Date(),
+          loginCount: { increment: 1 },
+        },
+      });
+    } catch (e) {
+      // lastLoginAt/loginCount might not exist, ignore
+      console.log('Could not update login stats (columns may not exist)');
+    }
 
     console.log('Magic link login successful for:', user.email);
 

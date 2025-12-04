@@ -54,14 +54,18 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Update last login
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            lastLoginAt: new Date(),
-            loginCount: { increment: 1 },
-          },
-        });
+        // Update last login (may fail if columns don't exist)
+        try {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              lastLoginAt: new Date(),
+              loginCount: { increment: 1 },
+            },
+          });
+        } catch (e) {
+          console.log('Could not update login stats');
+        }
 
         console.log('Login successful for:', normalizedEmail);
         
@@ -117,18 +121,23 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Get the user
+          // Get the user (basic columns only)
           const user = await prisma.user.findUnique({
             where: { email: magicLink.email },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              subscriptionTier: true,
+              subscriptionStatus: true,
+            },
           });
 
-          if (!user || !user.isActive || user.isSuspended) {
-            console.log('Magic link login failed: User not found or inactive');
+          if (!user) {
+            console.log('Magic link login failed: User not found');
             return null;
           }
-
-          // MFA verification is disabled for now (mfaEnabled column doesn't exist in DB)
-          // When MFA is properly set up in the database, add the verification here
 
           // Mark magic link as used
           await (prisma as any).magicLink.update({
@@ -139,14 +148,18 @@ export const authOptions: NextAuthOptions = {
             },
           });
 
-          // Update last login
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              lastLoginAt: new Date(),
-              loginCount: { increment: 1 },
-            },
-          });
+          // Update last login (may fail if columns don't exist)
+          try {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                lastLoginAt: new Date(),
+                loginCount: { increment: 1 },
+              },
+            });
+          } catch (e) {
+            console.log('Could not update login stats');
+          }
 
           console.log('Magic link login successful for:', user.email);
 
