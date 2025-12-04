@@ -10,10 +10,26 @@ const BASE_URL = process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amp
  * Request a magic link for passwordless login
  */
 export async function POST(request: NextRequest) {
+  console.log('=== Magic Link Request Started ===');
+  
   try {
-    const { email } = await request.json();
+    // Step 1: Parse request body
+    let body;
+    try {
+      body = await request.json();
+      console.log('Step 1 - Body parsed:', { email: body?.email });
+    } catch (parseError: any) {
+      console.error('Step 1 - Body parse error:', parseError.message);
+      return NextResponse.json(
+        { success: false, error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
+    const { email } = body;
 
     if (!email) {
+      console.log('Step 1 - No email provided');
       return NextResponse.json(
         { success: false, error: 'Email is required' },
         { status: 400 }
@@ -21,24 +37,31 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    console.log('Step 2 - Normalized email:', normalizedEmail);
 
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      select: { 
-        id: true, 
-        email: true, 
-        name: true, 
-        mfaEnabled: true,
-        isActive: true,
-        isSuspended: true,
-      },
-    });
+    // Step 2: Check if user exists
+    let user;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { 
+          id: true, 
+          email: true, 
+          name: true, 
+          mfaEnabled: true,
+          isActive: true,
+          isSuspended: true,
+        },
+      });
+      console.log('Step 2 - User lookup result:', user ? 'Found' : 'Not found');
+    } catch (userError: any) {
+      console.error('Step 2 - User lookup error:', userError.message);
+      throw userError;
+    }
 
     // Always return success to prevent email enumeration
-    // But only actually send the email if the user exists
     if (!user) {
-      console.log('Magic link requested for non-existent email:', normalizedEmail);
+      console.log('Step 3 - User not found, returning generic success');
       return NextResponse.json({
         success: true,
         message: 'If an account exists with this email, you will receive a sign-in link shortly.',
@@ -47,110 +70,96 @@ export async function POST(request: NextRequest) {
 
     // Check if user is active
     if (!user.isActive || user.isSuspended) {
-      console.log('Magic link requested for inactive/suspended user:', normalizedEmail);
+      console.log('Step 3 - User inactive/suspended');
       return NextResponse.json({
         success: true,
         message: 'If an account exists with this email, you will receive a sign-in link shortly.',
       });
     }
 
-    // Generate a secure token
+    // Step 3: Generate token
     const token = crypto.randomBytes(32).toString('hex');
-    
-    // Set expiration (15 minutes)
     const expires = new Date(Date.now() + 15 * 60 * 1000);
+    console.log('Step 3 - Token generated, expires:', expires.toISOString());
 
-    // Get IP and user agent for security
+    // Get IP and user agent
     const ipAddress = request.headers.get('x-forwarded-for') || 
                       request.headers.get('x-real-ip') || 
                       'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
+    // Step 4: Database operations
     try {
-      // First, check if the MagicLink table exists by trying a simple query
-      // Delete any existing unused magic links for this email
-      await (prisma as any).magicLink.deleteMany({
+      // Delete existing unused magic links
+      const deleted = await (prisma as any).magicLink.deleteMany({
         where: { 
           email: normalizedEmail,
           used: false,
         },
       });
+      console.log('Step 4a - Deleted old links:', deleted.count);
 
       // Create new magic link
-      await (prisma as any).magicLink.create({
+      const created = await (prisma as any).magicLink.create({
         data: {
           email: normalizedEmail,
           token,
           expires,
-          mfaPending: user.mfaEnabled,
+          mfaPending: user.mfaEnabled || false,
           ipAddress,
           userAgent,
         },
       });
-      
-      console.log('Magic link created for:', normalizedEmail);
+      console.log('Step 4b - Created magic link:', created.id);
     } catch (dbError: any) {
-      // Log the full error for debugging
-      console.error('MagicLink database error:', {
+      console.error('Step 4 - Database error:', {
         message: dbError.message,
         code: dbError.code,
-        meta: dbError.meta,
       });
-      
-      // Check if it's a "table doesn't exist" error
-      if (dbError.code === 'P2021' || 
-          dbError.message?.includes('does not exist') ||
-          dbError.message?.includes('relation') ||
-          dbError.message?.includes('MagicLink')) {
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Magic link feature is being set up. Please use password login for now.',
-            debug: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
-          },
-          { status: 503 }
-        );
-      }
-      
-      // Re-throw other errors
-      throw dbError;
+      return NextResponse.json(
+        { success: false, error: 'Database error. Please try password login.' },
+        { status: 503 }
+      );
     }
 
-    // Generate the magic link URL
+    // Step 5: Send email
     const magicLinkUrl = `${BASE_URL}/auth/magic-link/verify?token=${token}`;
+    console.log('Step 5 - Magic link URL generated');
 
-    // Send the email
-    const emailResult = await sendMagicLinkEmail(
-      normalizedEmail,
-      magicLinkUrl,
-      user.name || undefined
-    );
-
-    if (!emailResult.success) {
-      console.error('Failed to send magic link email:', emailResult.error);
-      // Still return success to not leak info, but log the error
+    try {
+      const emailResult = await sendMagicLinkEmail(
+        normalizedEmail,
+        magicLinkUrl,
+        user.name || undefined
+      );
+      console.log('Step 5 - Email result:', emailResult);
+      
+      if (!emailResult.success) {
+        console.error('Step 5 - Email send failed:', emailResult.error);
+      }
+    } catch (emailError: any) {
+      console.error('Step 5 - Email error:', emailError.message);
+      // Don't fail the request, email might still work
     }
 
-    console.log('Magic link sent to:', normalizedEmail, 'MFA required:', user.mfaEnabled);
-
+    console.log('=== Magic Link Request Completed Successfully ===');
+    
     return NextResponse.json({
       success: true,
       message: 'If an account exists with this email, you will receive a sign-in link shortly.',
     });
 
   } catch (error: any) {
-    console.error('Magic link request error:', {
+    console.error('=== Magic Link Request Failed ===');
+    console.error('Error:', {
       message: error.message,
       stack: error.stack,
       code: error.code,
+      name: error.name,
     });
     
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to process request. Please try password login.',
-        debug: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      },
+      { success: false, error: 'An unexpected error occurred. Please try password login.' },
       { status: 500 }
     );
   }
