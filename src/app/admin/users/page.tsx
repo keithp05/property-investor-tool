@@ -61,6 +61,8 @@ export default function UsersPage() {
   // Password reset result
   const [newPassword, setNewPassword] = useState<{ email: string; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [testingPassword, setTestingPassword] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Edit form
   const [editForm, setEditForm] = useState({ 
@@ -211,6 +213,35 @@ export default function UsersPage() {
       navigator.clipboard.writeText(newPassword.password);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  async function testPassword() {
+    if (!newPassword) return;
+    setTestingPassword(true);
+    setTestResult(null);
+    
+    try {
+      const response = await fetch('/api/admin/test-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: newPassword.email, 
+          password: newPassword.password 
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.loginWouldWork) {
+        setTestResult({ success: true, message: 'Password is correct! User can log in with this password.' });
+      } else {
+        setTestResult({ success: false, message: `Password test failed. Debug: ${JSON.stringify(data.debug || data.error)}` });
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, message: `Test error: ${err.message}` });
+    } finally {
+      setTestingPassword(false);
     }
   }
 
@@ -666,7 +697,7 @@ export default function UsersPage() {
                 <CheckCircle className="h-5 w-5 text-green-400" />
                 Password Reset Complete
               </h2>
-              <button onClick={() => setNewPassword(null)} className="text-gray-400 hover:text-white">
+              <button onClick={() => { setNewPassword(null); setTestResult(null); }} className="text-gray-400 hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -691,6 +722,25 @@ export default function UsersPage() {
                 </div>
               </div>
               
+              {/* Test Password Button */}
+              <button
+                onClick={testPassword}
+                disabled={testingPassword}
+                className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-700 flex items-center justify-center gap-2"
+              >
+                {testingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+                {testingPassword ? 'Testing...' : 'Test Password'}
+              </button>
+              
+              {/* Test Result */}
+              {testResult && (
+                <div className={`mt-4 p-3 rounded-lg ${testResult.success ? 'bg-green-900/20 border border-green-800' : 'bg-red-900/20 border border-red-800'}`}>
+                  <p className={`text-sm ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                    {testResult.success ? '✓ ' : '✗ '}{testResult.message}
+                  </p>
+                </div>
+              )}
+              
               <p className="text-yellow-500 text-xs mt-4">
                 ⚠️ Make sure to save this password - it won't be shown again!
               </p>
@@ -698,7 +748,7 @@ export default function UsersPage() {
             
             <div className="px-6 py-4 border-t border-gray-800">
               <button
-                onClick={() => setNewPassword(null)}
+                onClick={() => { setNewPassword(null); setTestResult(null); }}
                 className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
               >
                 Done
