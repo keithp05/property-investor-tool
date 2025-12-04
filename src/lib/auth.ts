@@ -94,9 +94,19 @@ export const authOptions: NextAuthOptions = {
 
         try {
           // Find the magic link
-          const magicLink = await prisma.magicLink.findUnique({
-            where: { token: credentials.token },
-          });
+          let magicLink;
+          try {
+            magicLink = await prisma.magicLink.findUnique({
+              where: { token: credentials.token },
+            });
+          } catch (dbError: any) {
+            // Table might not exist yet
+            if (dbError.code === 'P2021' || dbError.message?.includes('does not exist')) {
+              console.log('Magic link login failed: MagicLink table does not exist');
+              return null;
+            }
+            throw dbError;
+          }
 
           if (!magicLink) {
             console.log('Magic link login failed: Invalid token');

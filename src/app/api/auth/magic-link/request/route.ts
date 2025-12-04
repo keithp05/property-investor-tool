@@ -66,25 +66,37 @@ export async function POST(request: NextRequest) {
                       'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
-    // Delete any existing unused magic links for this email
-    await prisma.magicLink.deleteMany({
-      where: { 
-        email: normalizedEmail,
-        used: false,
-      },
-    });
+    try {
+      // Delete any existing unused magic links for this email
+      await prisma.magicLink.deleteMany({
+        where: { 
+          email: normalizedEmail,
+          used: false,
+        },
+      });
 
-    // Create new magic link
-    await prisma.magicLink.create({
-      data: {
-        email: normalizedEmail,
-        token,
-        expires,
-        mfaPending: user.mfaEnabled,
-        ipAddress,
-        userAgent,
-      },
-    });
+      // Create new magic link
+      await prisma.magicLink.create({
+        data: {
+          email: normalizedEmail,
+          token,
+          expires,
+          mfaPending: user.mfaEnabled,
+          ipAddress,
+          userAgent,
+        },
+      });
+    } catch (dbError: any) {
+      // Handle case where MagicLink table doesn't exist yet
+      if (dbError.code === 'P2021' || dbError.message?.includes('does not exist')) {
+        console.error('MagicLink table does not exist. Please run migrations.');
+        return NextResponse.json(
+          { success: false, error: 'Magic link feature is not yet available. Please use password login.' },
+          { status: 503 }
+        );
+      }
+      throw dbError;
+    }
 
     // Generate the magic link URL
     const magicLinkUrl = `${BASE_URL}/auth/magic-link/verify?token=${token}`;

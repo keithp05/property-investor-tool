@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { Loader2, CheckCircle, XCircle, Shield, ArrowLeft, Mail } from 'lucide-react';
 
-export default function MagicLinkVerifyPage() {
+function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -218,5 +218,20 @@ export default function MagicLinkVerifyPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function MagicLinkVerifyPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-100 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+          <Loader2 className="h-12 w-12 animate-spin mx-auto text-emerald-500 mb-4" />
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Loading...</h1>
+        </div>
+      </div>
+    }>
+      <VerifyContent />
+    </Suspense>
   );
 }

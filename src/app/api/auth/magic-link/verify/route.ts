@@ -17,10 +17,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find the magic link
-    const magicLink = await prisma.magicLink.findUnique({
-      where: { token },
-    });
+    let magicLink;
+    try {
+      // Find the magic link
+      magicLink = await prisma.magicLink.findUnique({
+        where: { token },
+      });
+    } catch (dbError: any) {
+      if (dbError.code === 'P2021' || dbError.message?.includes('does not exist')) {
+        return NextResponse.json(
+          { success: false, error: 'Magic link feature is not yet available' },
+          { status: 503 }
+        );
+      }
+      throw dbError;
+    }
 
     if (!magicLink) {
       return NextResponse.json(
@@ -98,10 +109,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find the magic link
-    const magicLink = await prisma.magicLink.findUnique({
-      where: { token },
-    });
+    let magicLink;
+    try {
+      // Find the magic link
+      magicLink = await prisma.magicLink.findUnique({
+        where: { token },
+      });
+    } catch (dbError: any) {
+      if (dbError.code === 'P2021' || dbError.message?.includes('does not exist')) {
+        return NextResponse.json(
+          { success: false, error: 'Magic link feature is not yet available' },
+          { status: 503 }
+        );
+      }
+      throw dbError;
+    }
 
     if (!magicLink) {
       return NextResponse.json(
