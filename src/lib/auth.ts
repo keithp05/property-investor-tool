@@ -21,7 +21,6 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Normalize email to lowercase
         const normalizedEmail = credentials.email.toLowerCase().trim();
         
         const user = await prisma.user.findUnique({
@@ -92,17 +91,13 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Dynamic import to avoid build-time type issues
-          const { authenticator } = await import('otplib');
-          
-          // Find the magic link - use raw query to avoid type issues during build
+          // Find the magic link
           let magicLink: any;
           try {
             magicLink = await (prisma as any).magicLink.findUnique({
               where: { token: credentials.token },
             });
           } catch (dbError: any) {
-            // Table might not exist yet
             console.log('Magic link login failed: MagicLink table error', dbError.message);
             return null;
           }
@@ -112,13 +107,11 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Check if already used
           if (magicLink.used) {
             console.log('Magic link login failed: Token already used');
             return null;
           }
 
-          // Check if expired
           if (new Date() > new Date(magicLink.expires)) {
             console.log('Magic link login failed: Token expired');
             return null;
@@ -134,28 +127,8 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // If MFA is enabled, verify the code
-          if (user.mfaEnabled) {
-            if (!credentials.mfaCode) {
-              console.log('Magic link login failed: MFA required but no code provided');
-              return null;
-            }
-
-            if (!user.mfaSecret) {
-              console.log('Magic link login failed: MFA not properly configured');
-              return null;
-            }
-
-            const isValidCode = authenticator.verify({
-              token: credentials.mfaCode,
-              secret: user.mfaSecret,
-            });
-
-            if (!isValidCode) {
-              console.log('Magic link login failed: Invalid MFA code');
-              return null;
-            }
-          }
+          // MFA verification is disabled for now (mfaEnabled column doesn't exist in DB)
+          // When MFA is properly set up in the database, add the verification here
 
           // Mark magic link as used
           await (prisma as any).magicLink.update({

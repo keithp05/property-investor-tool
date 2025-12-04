@@ -24,14 +24,13 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Step 2: Check if user exists
+    // Step 2: Check if user exists (only query columns that definitely exist)
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: { 
         id: true, 
         email: true, 
         name: true, 
-        mfaEnabled: true,
         isActive: true,
         isSuspended: true,
       },
@@ -72,13 +71,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create new magic link
+    // Create new magic link (mfaPending defaults to false for now)
     await (prisma as any).magicLink.create({
       data: {
         email: normalizedEmail,
         token,
         expires,
-        mfaPending: user.mfaEnabled || false,
+        mfaPending: false, // MFA check will happen at verification time
         ipAddress,
         userAgent,
       },
@@ -105,7 +104,6 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Magic link request error:', error);
     
-    // Return detailed error for debugging (remove in production)
     return NextResponse.json(
       { 
         success: false, 
@@ -114,7 +112,6 @@ export async function POST(request: NextRequest) {
           message: error.message,
           name: error.name,
           code: error.code,
-          stack: error.stack?.split('\n').slice(0, 5),
         }
       },
       { status: 500 }

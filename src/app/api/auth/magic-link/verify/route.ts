@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
 
     let magicLink: any;
     try {
-      // Find the magic link - use prisma as any to avoid type issues
       magicLink = await (prisma as any).magicLink.findUnique({
         where: { token },
       });
@@ -38,7 +37,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check if already used
     if (magicLink.used) {
       return NextResponse.json(
         { success: false, error: 'This link has already been used' },
@@ -46,7 +44,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check if expired
     if (new Date() > new Date(magicLink.expires)) {
       return NextResponse.json(
         { success: false, error: 'This link has expired. Please request a new one.' },
@@ -54,14 +51,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get the user
+    // Get the user (only query columns that definitely exist)
     const user = await prisma.user.findUnique({
       where: { email: magicLink.email },
       select: {
         id: true,
         email: true,
         name: true,
-        mfaEnabled: true,
         isActive: true,
         isSuspended: true,
       },
@@ -74,19 +70,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Return verification status
+    // For now, MFA is not required (mfaEnabled column doesn't exist in DB)
     return NextResponse.json({
       success: true,
       email: user.email,
       name: user.name,
-      mfaRequired: user.mfaEnabled,
-      token, // Return token for the complete step
+      mfaRequired: false,
+      token,
     });
 
   } catch (error: any) {
     console.error('Magic link verify error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to verify link' },
+      { success: false, error: 'Failed to verify link', debug: error.message },
       { status: 500 }
     );
   }
@@ -109,7 +105,6 @@ export async function POST(request: NextRequest) {
 
     let magicLink: any;
     try {
-      // Find the magic link
       magicLink = await (prisma as any).magicLink.findUnique({
         where: { token },
       });
@@ -128,7 +123,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if already used
     if (magicLink.used) {
       return NextResponse.json(
         { success: false, error: 'This link has already been used' },
@@ -136,7 +130,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if expired
     if (new Date() > new Date(magicLink.expires)) {
       return NextResponse.json(
         { success: false, error: 'This link has expired. Please request a new one.' },
@@ -144,7 +137,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the user
+    // Get the user (only query columns that definitely exist)
     const user = await prisma.user.findUnique({
       where: { email: magicLink.email },
       select: {
@@ -152,8 +145,6 @@ export async function POST(request: NextRequest) {
         email: true,
         name: true,
         role: true,
-        mfaEnabled: true,
-        mfaSecret: true,
         subscriptionTier: true,
         subscriptionStatus: true,
         isActive: true,
@@ -168,37 +159,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If MFA is enabled, verify the code
-    if (user.mfaEnabled) {
-      if (!mfaCode) {
-        return NextResponse.json(
-          { success: false, error: 'MFA code is required', mfaRequired: true },
-          { status: 400 }
-        );
-      }
-
-      // Verify TOTP code - dynamic import to avoid build issues
-      const { authenticator } = await import('otplib');
-      
-      if (!user.mfaSecret) {
-        return NextResponse.json(
-          { success: false, error: 'MFA not properly configured' },
-          { status: 400 }
-        );
-      }
-
-      const isValidCode = authenticator.verify({
-        token: mfaCode,
-        secret: user.mfaSecret,
-      });
-
-      if (!isValidCode) {
-        return NextResponse.json(
-          { success: false, error: 'Invalid MFA code', mfaRequired: true },
-          { status: 400 }
-        );
-      }
-    }
+    // MFA is disabled for now (mfaEnabled/mfaSecret columns don't exist in DB)
+    // When MFA is properly set up, add the verification here
 
     // Mark magic link as used
     await (prisma as any).magicLink.update({
@@ -220,7 +182,6 @@ export async function POST(request: NextRequest) {
 
     console.log('Magic link login successful for:', user.email);
 
-    // Return user data for NextAuth to create session
     return NextResponse.json({
       success: true,
       user: {
@@ -236,7 +197,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Magic link complete error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to complete authentication' },
+      { success: false, error: 'Failed to complete authentication', debug: error.message },
       { status: 500 }
     );
   }
