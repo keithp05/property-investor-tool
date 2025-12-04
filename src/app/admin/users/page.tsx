@@ -7,7 +7,7 @@ import {
   Loader2, RefreshCw, AlertTriangle, Edit3, Trash2, 
   Plus, X, Check, Key, UserPlus, Copy, CheckCircle, Shield,
   Building2, Users, CreditCard, Eye, ChevronDown, Search,
-  Filter, Crown, Home, Settings
+  Filter, Crown, Home, Settings, Mail
 } from 'lucide-react';
 
 interface User {
@@ -66,6 +66,7 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState({ 
     role: '', 
     resetPassword: false,
+    sendEmail: true,
     subscriptionTier: '',
     subscriptionStatus: '',
   });
@@ -118,6 +119,7 @@ export default function UsersPage() {
           userId: editingUser.id,
           role: editForm.role,
           resetPassword: editForm.resetPassword,
+          sendEmail: editForm.sendEmail,
           subscriptionTier: editForm.subscriptionTier,
           subscriptionStatus: editForm.subscriptionStatus,
         }),
@@ -128,11 +130,14 @@ export default function UsersPage() {
       if (data.success) {
         if (data.newPassword) {
           setNewPassword({ email: editingUser.email, password: data.newPassword });
+          if (data.emailSent) {
+            setActionMessage('Password reset email sent successfully');
+          }
         } else {
           setActionMessage(data.message || 'User updated successfully');
         }
         setEditingUser(null);
-        setEditForm({ role: '', resetPassword: false, subscriptionTier: '', subscriptionStatus: '' });
+        setEditForm({ role: '', resetPassword: false, sendEmail: true, subscriptionTier: '', subscriptionStatus: '' });
         loadUsers();
       } else {
         setActionMessage(`Error: ${data.error || data.debug}`);
@@ -453,6 +458,7 @@ export default function UsersPage() {
                             setEditForm({ 
                               role: user.role, 
                               resetPassword: false,
+                              sendEmail: true,
                               subscriptionTier: user.subscriptionTier,
                               subscriptionStatus: user.subscriptionStatus,
                             });
@@ -636,6 +642,7 @@ export default function UsersPage() {
                   setEditForm({ 
                     role: viewingUser.role, 
                     resetPassword: false,
+                    sendEmail: true,
                     subscriptionTier: viewingUser.subscriptionTier,
                     subscriptionStatus: viewingUser.subscriptionStatus,
                   });
@@ -762,7 +769,7 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-gray-800 rounded-lg">
+              <div className="p-4 bg-gray-800 rounded-lg space-y-3">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -778,6 +785,24 @@ export default function UsersPage() {
                     <p className="text-xs text-gray-500 mt-1">Generate a new random password</p>
                   </div>
                 </label>
+                
+                {editForm.resetPassword && (
+                  <label className="flex items-center gap-3 cursor-pointer ml-7">
+                    <input
+                      type="checkbox"
+                      checked={editForm.sendEmail}
+                      onChange={(e) => setEditForm({ ...editForm, sendEmail: e.target.checked })}
+                      className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-blue-400 flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        Send Email
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">Email the new password to the user</p>
+                    </div>
+                  </label>
+                )}
               </div>
             </div>
             

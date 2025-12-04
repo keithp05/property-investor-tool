@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAdminSession } from '@/lib/admin-session';
 import bcrypt from 'bcryptjs';
+import { sendPasswordResetEmail, sendWelcomeEmail } from '@/lib/email';
 
 /**
  * GET /api/admin/users
@@ -38,10 +39,6 @@ export async function GET(request: NextRequest) {
             createdAt: true,
             subscriptionTier: true,
             subscriptionStatus: true,
-            // These might not exist yet
-            // isActive: true,
-            // isSuspended: true,
-            // mfaEnabled: true,
             ...(includeRelations && {
               landlordProfile: {
                 select: {
@@ -192,7 +189,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { email, name, password, role } = body;
+    const { email, name, password, role, sendEmail } = body;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -239,10 +236,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Send welcome email if requested
+    let emailSent = false;
+    if (sendEmail) {
+      const result = await sendWelcomeEmail(normalizedEmail, password, name);
+      emailSent = result.success;
+    }
+
     return NextResponse.json({
       success: true,
       user: newUser,
       message: 'User created successfully',
+      emailSent,
     });
 
   } catch (error: any) {
@@ -267,7 +272,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, role, resetPassword, subscriptionTier, subscriptionStatus } = body;
+    const { userId, role, resetPassword, subscriptionTier, subscriptionStatus, sendEmail } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
@@ -275,7 +280,7 @@ export async function PATCH(request: NextRequest) {
 
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true },
+      select: { id: true, email: true, name: true, password: true },
     });
 
     if (!existingUser) {
@@ -302,14 +307,23 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (resetPassword) {
-      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      // Generate a more readable password
+      const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let password = '';
       for (let i = 0; i < 12; i++) {
         password += chars.charAt(Math.floor(Math.random() * chars.length));
       }
       newPassword = password + '!';
       
+      console.log('=== PASSWORD RESET DEBUG ===');
+      console.log('User:', existingUser.email);
+      console.log('New password length:', newPassword.length);
+      console.log('Old password hash length:', existingUser.password?.length);
+      
       const hashedPassword = await bcrypt.hash(newPassword, 12);
+      
+      console.log('New password hash length:', hashedPassword.length);
+      
       updateData.password = hashedPassword;
       changes.push('password reset');
     }
@@ -318,6 +332,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
 
+    // Update the user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -328,16 +343,47 @@ export async function PATCH(request: NextRequest) {
         role: true,
         subscriptionTier: true,
         subscriptionStatus: true,
+        password: true, // For verification
       },
     });
 
+    // Verify the password was actually saved
+    if (resetPassword && newPassword) {
+      const verifyMatch = await bcrypt.compare(newPassword, updatedUser.password);
+      console.log('Password verification after save:', verifyMatch);
+      
+      if (!verifyMatch) {
+        console.error('PASSWORD VERIFICATION FAILED - password was not saved correctly');
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Password reset failed - please try again' 
+        }, { status: 500 });
+      }
+    }
+
     console.log(`User ${existingUser.email} updated:`, changes.join(', '));
+
+    // Send password reset email if requested
+    let emailSent = false;
+    if (resetPassword && newPassword && sendEmail) {
+      const result = await sendPasswordResetEmail(
+        existingUser.email, 
+        newPassword, 
+        existingUser.name || undefined
+      );
+      emailSent = result.success;
+      console.log('Password reset email sent:', emailSent);
+    }
+
+    // Don't return the password hash to the client
+    const { password: _, ...userWithoutPassword } = updatedUser;
 
     return NextResponse.json({
       success: true,
-      user: updatedUser,
+      user: userWithoutPassword,
       message: changes.join(', '),
       newPassword: newPassword,
+      emailSent,
     });
 
   } catch (error: any) {

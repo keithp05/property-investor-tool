@@ -44,7 +44,7 @@
     "react-hook-form": "^7.54.2",
     "react-plaid-link": "^3.6.0",
     "recharts": "^2.15.0",
-    "resend": "^6.4.2",
+    "resend": "^6.5.2",
     "stripe": "^19.3.0",
     "tailwind-merge": "^2.6.0",
     "uuid": "^13.0.0",
