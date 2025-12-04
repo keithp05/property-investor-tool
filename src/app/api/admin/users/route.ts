@@ -307,22 +307,35 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (resetPassword) {
-      // Generate a more readable password
-      const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      // Generate a more readable password - avoid ambiguous characters
+      const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
       let password = '';
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 10; i++) {
         password += chars.charAt(Math.floor(Math.random() * chars.length));
       }
-      newPassword = password + '!';
+      newPassword = password;
       
       console.log('=== PASSWORD RESET DEBUG ===');
       console.log('User:', existingUser.email);
+      console.log('New plaintext password:', newPassword);
       console.log('New password length:', newPassword.length);
-      console.log('Old password hash length:', existingUser.password?.length);
       
       const hashedPassword = await bcrypt.hash(newPassword, 12);
       
+      console.log('New password hash:', hashedPassword);
       console.log('New password hash length:', hashedPassword.length);
+      
+      // Verify hash works before saving
+      const verifyBeforeSave = await bcrypt.compare(newPassword, hashedPassword);
+      console.log('Pre-save verification:', verifyBeforeSave);
+      
+      if (!verifyBeforeSave) {
+        console.error('CRITICAL: Hash verification failed before save!');
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Password hashing failed' 
+        }, { status: 500 });
+      }
       
       updateData.password = hashedPassword;
       changes.push('password reset');
@@ -347,16 +360,17 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    // Verify the password was actually saved
+    // Verify the password was actually saved correctly
     if (resetPassword && newPassword) {
       const verifyMatch = await bcrypt.compare(newPassword, updatedUser.password);
-      console.log('Password verification after save:', verifyMatch);
+      console.log('Post-save password verification:', verifyMatch);
+      console.log('Stored hash after save:', updatedUser.password);
       
       if (!verifyMatch) {
         console.error('PASSWORD VERIFICATION FAILED - password was not saved correctly');
         return NextResponse.json({ 
           success: false, 
-          error: 'Password reset failed - please try again' 
+          error: 'Password reset failed - verification failed after save' 
         }, { status: 500 });
       }
     }
@@ -407,40 +421,81 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
+    }
+    
     const { userId } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
+    console.log('Attempting to delete user:', userId);
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, name: true },
+      select: { 
+        id: true,
+        email: true, 
+        name: true,
+        landlordProfile: { select: { id: true } },
+        tenantProfile: { select: { id: true } },
+        proProfile: { select: { id: true } },
+      },
     });
 
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    await prisma.user.delete({
-      where: { id: userId },
-    });
+    console.log('Found user to delete:', user.email);
+    console.log('Has landlord profile:', !!user.landlordProfile);
+    console.log('Has tenant profile:', !!user.tenantProfile);
+    console.log('Has pro profile:', !!user.proProfile);
 
-    return NextResponse.json({
-      success: true,
-      message: `User ${user.email} deleted successfully`,
-    });
+    // Delete related records first to avoid foreign key constraints
+    // The cascade should handle most of this, but let's be explicit
+    
+    try {
+      // Delete feature overrides first
+      await prisma.userFeatureOverride.deleteMany({
+        where: { userId }
+      }).catch(() => {
+        console.log('No feature overrides to delete or table does not exist');
+      });
+
+      // Now delete the user (cascades should handle the rest)
+      await prisma.user.delete({
+        where: { id: userId },
+      });
+
+      console.log('User deleted successfully:', user.email);
+
+      return NextResponse.json({
+        success: true,
+        message: `User ${user.email} deleted successfully`,
+      });
+    } catch (deleteError: any) {
+      console.error('Delete operation failed:', deleteError);
+      
+      if (deleteError.code === 'P2003') {
+        return NextResponse.json(
+          { success: false, error: 'Cannot delete user: they have related records (properties, tenants, etc.). Please remove those first.' },
+          { status: 400 }
+        );
+      }
+      
+      throw deleteError;
+    }
 
   } catch (error: any) {
     console.error('Admin user delete error:', error);
-    
-    if (error.code === 'P2003') {
-      return NextResponse.json(
-        { success: false, error: 'Cannot delete user: they have related records (properties, tenants, etc.)' },
-        { status: 400 }
-      );
-    }
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
     
     return NextResponse.json(
       { success: false, error: 'Failed to delete user', debug: error.message },
