@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
+// Version 2 - Simplified now that MFA columns exist
+
 // Generate a random Base32 secret for TOTP
 function generateSecret(): string {
   const buffer = crypto.randomBytes(20);
@@ -17,7 +19,6 @@ function generateSecret(): string {
 
 // Verify TOTP code
 function verifyTOTP(secret: string, code: string): boolean {
-  // Check current and previous/next time step
   for (let i = -1; i <= 1; i++) {
     const time = Math.floor(Date.now() / 1000 / 30) + i;
     const timeBuffer = Buffer.alloc(8);
@@ -64,37 +65,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Try to get MFA status - columns might not exist
-    try {
-      const user = await prisma.user.findUnique({
-        where: { email: session.user.email },
-        select: { 
-          mfaEnabled: true,
-          mfaVerifiedAt: true,
-        },
-      });
+    // Use raw query to get MFA status (bypasses Prisma client type issues)
+    const result = await prisma.$queryRaw<any[]>`
+      SELECT "mfaEnabled", "mfaVerifiedAt" 
+      FROM "User" 
+      WHERE email = ${session.user.email}
+      LIMIT 1
+    `;
 
-      if (!user) {
-        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
-      }
-
-      return NextResponse.json({
-        success: true,
-        mfaEnabled: user.mfaEnabled || false,
-        mfaVerifiedAt: user.mfaVerifiedAt,
-      });
-    } catch (dbError: any) {
-      // Columns don't exist yet
-      if (dbError.message?.includes('does not exist') || dbError.code === 'P2022') {
-        return NextResponse.json({
-          success: true,
-          mfaEnabled: false,
-          mfaVerifiedAt: null,
-          note: 'MFA columns not yet created in database',
-        });
-      }
-      throw dbError;
+    if (!result || result.length === 0) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
+
+    const user = result[0];
+
+    return NextResponse.json({
+      success: true,
+      mfaEnabled: user.mfaEnabled || false,
+      mfaVerifiedAt: user.mfaVerifiedAt,
+    });
 
   } catch (error: any) {
     console.error('Get MFA status error:', error);
@@ -119,56 +108,30 @@ export async function POST(request: NextRequest) {
 
     const { action, code } = await request.json();
 
-    // First check if MFA columns exist by trying a simple query
-    let user: any;
-    let mfaColumnsExist = true;
-    
-    try {
-      user = await prisma.user.findUnique({
-        where: { email: session.user.email },
-        select: { 
-          id: true,
-          email: true,
-          mfaEnabled: true,
-          mfaSecret: true,
-        },
-      });
-    } catch (dbError: any) {
-      if (dbError.message?.includes('does not exist') || dbError.code === 'P2022') {
-        mfaColumnsExist = false;
-        // Get user without MFA columns
-        user = await prisma.user.findUnique({
-          where: { email: session.user.email },
-          select: { 
-            id: true,
-            email: true,
-          },
-        });
-      } else {
-        throw dbError;
-      }
-    }
+    // Get user with raw query
+    const users = await prisma.$queryRaw<any[]>`
+      SELECT id, email, "mfaEnabled", "mfaSecret"
+      FROM "User" 
+      WHERE email = ${session.user.email}
+      LIMIT 1
+    `;
 
-    if (!user) {
+    if (!users || users.length === 0) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    if (!mfaColumnsExist) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'MFA is not yet available. Database migration is pending. Please try again in a few minutes.',
-      }, { status: 503 });
-    }
+    const user = users[0];
 
     if (action === 'setup') {
       // Generate new secret
       const secret = generateSecret();
       
-      // Store secret (not enabled yet)
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { mfaSecret: secret },
-      });
+      // Store secret using raw query
+      await prisma.$executeRaw`
+        UPDATE "User" 
+        SET "mfaSecret" = ${secret}
+        WHERE id = ${user.id}
+      `;
 
       // Generate QR code URL
       const issuer = 'RentalIQ';
@@ -196,14 +159,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Invalid code. Please try again.' }, { status: 400 });
       }
 
-      // Enable MFA
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { 
-          mfaEnabled: true,
-          mfaVerifiedAt: new Date(),
-        },
-      });
+      // Enable MFA using raw query
+      await prisma.$executeRaw`
+        UPDATE "User" 
+        SET "mfaEnabled" = true, "mfaVerifiedAt" = NOW()
+        WHERE id = ${user.id}
+      `;
 
       return NextResponse.json({
         success: true,
@@ -215,15 +176,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('MFA setup error:', error);
-    
-    // Check for column doesn't exist error
-    if (error.message?.includes('does not exist') || error.code === 'P2022') {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'MFA is not yet available. Database migration is pending. Please try again in a few minutes.',
-      }, { status: 503 });
-    }
-    
     return NextResponse.json(
       { success: false, error: 'Failed to setup MFA', debug: error.message },
       { status: 500 }
@@ -249,18 +201,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Password is required to disable MFA' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { 
-        id: true,
-        password: true,
-        mfaEnabled: true,
-      },
-    });
+    // Get user with raw query
+    const users = await prisma.$queryRaw<any[]>`
+      SELECT id, password, "mfaEnabled"
+      FROM "User" 
+      WHERE email = ${session.user.email}
+      LIMIT 1
+    `;
 
-    if (!user) {
+    if (!users || users.length === 0) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
+
+    const user = users[0];
 
     // Verify password
     const bcrypt = require('bcryptjs');
@@ -270,16 +223,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid password' }, { status: 400 });
     }
 
-    // Disable MFA
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { 
-        mfaEnabled: false,
-        mfaSecret: null,
-        mfaVerifiedAt: null,
-        mfaBackupCodes: [],
-      },
-    });
+    // Disable MFA using raw query
+    await prisma.$executeRaw`
+      UPDATE "User" 
+      SET "mfaEnabled" = false, "mfaSecret" = NULL, "mfaVerifiedAt" = NULL, "mfaBackupCodes" = ARRAY[]::TEXT[]
+      WHERE id = ${user.id}
+    `;
 
     return NextResponse.json({
       success: true,

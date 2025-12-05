@@ -4,6 +4,8 @@ import { verifyAdminSession } from '@/lib/admin-session';
 import bcrypt from 'bcryptjs';
 import { sendPasswordResetEmail, sendWelcomeEmail } from '@/lib/email';
 
+// Version 2 - Simplified delete function
+
 /**
  * GET /api/admin/users
  * List all users with pagination and relationships
@@ -23,12 +25,10 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build the query based on what columns exist
     let users;
     let total;
 
     try {
-      // Try to get users with all fields and relations
       [users, total] = await Promise.all([
         prisma.user.findMany({
           select: {
@@ -89,7 +89,6 @@ export async function GET(request: NextRequest) {
         prisma.user.count(),
       ]);
     } catch (e) {
-      // Fallback to simpler query if relations fail
       console.log('Falling back to simple user query');
       [users, total] = await Promise.all([
         prisma.user.findMany({
@@ -110,7 +109,6 @@ export async function GET(request: NextRequest) {
       ]);
     }
 
-    // Transform the data for the frontend
     const transformedUsers = users.map((user: any) => {
       const transformed: any = {
         id: user.id,
@@ -125,7 +123,6 @@ export async function GET(request: NextRequest) {
         mfaEnabled: false,
       };
 
-      // Add landlord profile data
       if (user.landlordProfile) {
         transformed.landlordProfile = {
           id: user.landlordProfile.id,
@@ -135,7 +132,6 @@ export async function GET(request: NextRequest) {
         };
       }
 
-      // Add tenant profile data
       if (user.tenantProfile) {
         transformed.tenantProfile = {
           id: user.tenantProfile.id,
@@ -236,7 +232,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Send welcome email if requested
     let emailSent = false;
     if (sendEmail) {
       const result = await sendWelcomeEmail(normalizedEmail, password, name);
@@ -307,7 +302,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (resetPassword) {
-      // Generate a more readable password - avoid ambiguous characters
       const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
       let password = '';
       for (let i = 0; i < 10; i++) {
@@ -315,22 +309,10 @@ export async function PATCH(request: NextRequest) {
       }
       newPassword = password;
       
-      console.log('=== PASSWORD RESET DEBUG ===');
-      console.log('User:', existingUser.email);
-      console.log('New plaintext password:', newPassword);
-      console.log('New password length:', newPassword.length);
-      
       const hashedPassword = await bcrypt.hash(newPassword, 12);
-      
-      console.log('New password hash:', hashedPassword);
-      console.log('New password hash length:', hashedPassword.length);
-      
-      // Verify hash works before saving
       const verifyBeforeSave = await bcrypt.compare(newPassword, hashedPassword);
-      console.log('Pre-save verification:', verifyBeforeSave);
       
       if (!verifyBeforeSave) {
-        console.error('CRITICAL: Hash verification failed before save!');
         return NextResponse.json({ 
           success: false, 
           error: 'Password hashing failed' 
@@ -345,7 +327,6 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
 
-    // Update the user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -356,18 +337,13 @@ export async function PATCH(request: NextRequest) {
         role: true,
         subscriptionTier: true,
         subscriptionStatus: true,
-        password: true, // For verification
+        password: true,
       },
     });
 
-    // Verify the password was actually saved correctly
     if (resetPassword && newPassword) {
       const verifyMatch = await bcrypt.compare(newPassword, updatedUser.password);
-      console.log('Post-save password verification:', verifyMatch);
-      console.log('Stored hash after save:', updatedUser.password);
-      
       if (!verifyMatch) {
-        console.error('PASSWORD VERIFICATION FAILED - password was not saved correctly');
         return NextResponse.json({ 
           success: false, 
           error: 'Password reset failed - verification failed after save' 
@@ -375,9 +351,6 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    console.log(`User ${existingUser.email} updated:`, changes.join(', '));
-
-    // Send password reset email if requested
     let emailSent = false;
     if (resetPassword && newPassword && sendEmail) {
       const result = await sendPasswordResetEmail(
@@ -386,10 +359,8 @@ export async function PATCH(request: NextRequest) {
         existingUser.name || undefined
       );
       emailSent = result.success;
-      console.log('Password reset email sent:', emailSent);
     }
 
-    // Don't return the password hash to the client
     const { password: _, ...userWithoutPassword } = updatedUser;
 
     return NextResponse.json({
@@ -434,17 +405,16 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    console.log('Attempting to delete user:', userId);
+    console.log('DELETE: Attempting to delete user:', userId);
 
+    // Simple user lookup without relations to avoid query errors
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { 
         id: true,
         email: true, 
         name: true,
-        landlordProfile: { select: { id: true } },
-        tenantProfile: { select: { id: true } },
-        proProfile: { select: { id: true } },
+        role: true,
       },
     });
 
@@ -452,51 +422,80 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    console.log('Found user to delete:', user.email);
-    console.log('Has landlord profile:', !!user.landlordProfile);
-    console.log('Has tenant profile:', !!user.tenantProfile);
-    console.log('Has pro profile:', !!user.proProfile);
+    // Prevent deleting SUPER_ADMIN
+    if (user.role === 'SUPER_ADMIN') {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Cannot delete SUPER_ADMIN users' 
+      }, { status: 403 });
+    }
 
-    // Delete related records first to avoid foreign key constraints
-    // The cascade should handle most of this, but let's be explicit
-    
+    console.log('DELETE: Found user to delete:', user.email);
+
+    // Delete in order to handle foreign keys
+    // 1. Delete feature overrides
     try {
-      // Delete feature overrides first
-      await prisma.userFeatureOverride.deleteMany({
-        where: { userId }
-      }).catch(() => {
-        console.log('No feature overrides to delete or table does not exist');
-      });
+      await prisma.userFeatureOverride.deleteMany({ where: { userId } });
+      console.log('DELETE: Deleted feature overrides');
+    } catch (e: any) {
+      console.log('DELETE: Feature overrides cleanup:', e.message);
+    }
 
-      // Now delete the user (cascades should handle the rest)
+    // 2. Delete accounts (OAuth)
+    try {
+      await prisma.account.deleteMany({ where: { userId } });
+      console.log('DELETE: Deleted accounts');
+    } catch (e: any) {
+      console.log('DELETE: Accounts cleanup:', e.message);
+    }
+
+    // 3. Delete sessions
+    try {
+      await prisma.session.deleteMany({ where: { userId } });
+      console.log('DELETE: Deleted sessions');
+    } catch (e: any) {
+      console.log('DELETE: Sessions cleanup:', e.message);
+    }
+
+    // 4. Delete magic links
+    try {
+      await prisma.$executeRaw`DELETE FROM "MagicLink" WHERE email = ${user.email}`;
+      console.log('DELETE: Deleted magic links');
+    } catch (e: any) {
+      console.log('DELETE: Magic links cleanup:', e.message);
+    }
+
+    // 5. Finally delete the user
+    try {
       await prisma.user.delete({
         where: { id: userId },
       });
-
-      console.log('User deleted successfully:', user.email);
+      console.log('DELETE: User deleted successfully:', user.email);
 
       return NextResponse.json({
         success: true,
         message: `User ${user.email} deleted successfully`,
       });
     } catch (deleteError: any) {
-      console.error('Delete operation failed:', deleteError);
+      console.error('DELETE: User delete failed:', deleteError.message);
+      console.error('DELETE: Error code:', deleteError.code);
       
       if (deleteError.code === 'P2003') {
-        return NextResponse.json(
-          { success: false, error: 'Cannot delete user: they have related records (properties, tenants, etc.). Please remove those first.' },
-          { status: 400 }
-        );
+        return NextResponse.json({
+          success: false,
+          error: 'Cannot delete user: they have related records (properties, tenants, etc.). Please remove those first or deactivate the user instead.',
+        }, { status: 400 });
       }
       
-      throw deleteError;
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to delete user',
+        debug: deleteError.message,
+      }, { status: 500 });
     }
 
   } catch (error: any) {
-    console.error('Admin user delete error:', error);
-    console.error('Error code:', error.code);
-    console.error('Error message:', error.message);
-    
+    console.error('DELETE: Unexpected error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to delete user', debug: error.message },
       { status: 500 }
