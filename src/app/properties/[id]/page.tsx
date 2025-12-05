@@ -573,6 +573,13 @@ export default function PropertyDetailsPage() {
                 {refreshingProperty ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
                 Refresh Data
               </button>
+              <Link 
+                href={`/properties/${params.id}/analyze?address=${encodeURIComponent(property.address)}&city=${encodeURIComponent(property.city)}&state=${encodeURIComponent(property.state)}&zipCode=${encodeURIComponent(property.zipCode)}&price=${property.estimatedValue || property.purchasePrice || 0}`}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              >
+                <TrendingUp className="h-5 w-5" />
+                Analyze Property
+              </Link>
               <button onClick={() => setShowApplicationModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                 <FileText className="h-5 w-5" />
                 Application Link
