@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
-// Version 2 - Simplified now that MFA columns exist
+// Version 3 - Using raw SQL queries, columns confirmed to exist
 
 // Generate a random Base32 secret for TOTP
 function generateSecret(): string {
@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      version: 3,
       mfaEnabled: user.mfaEnabled || false,
       mfaVerifiedAt: user.mfaVerifiedAt,
     });
