@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendApplicationReceivedSMS } from '@/lib/smsService';
 
 /**
  * POST /api/applications/[link]/submit
@@ -16,6 +17,25 @@ export async function POST(
     // Verify application exists and is pending
     const application = await prisma.tenantApplication.findUnique({
       where: { applicationLink: link },
+      include: {
+        property: {
+          select: {
+            address: true,
+            city: true,
+            state: true,
+          },
+        },
+        landlord: {
+          include: {
+            user: {
+              select: {
+                email: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!application) {
@@ -110,7 +130,33 @@ export async function POST(
 
     console.log(`✅ Application submitted: ${updatedApplication.id}`);
 
+    // Build property address for notification
+    const propertyAddress = application.property
+      ? `${application.property.address}, ${application.property.city}`
+      : 'the property';
+
+    // Send SMS notification to applicant
+    if (data.phone) {
+      try {
+        const smsResult = await sendApplicationReceivedSMS(
+          data.phone,
+          data.fullName || 'Applicant',
+          propertyAddress
+        );
+        
+        if (smsResult.success) {
+          console.log(`📱 SMS sent to applicant: ${data.phone}`);
+        } else {
+          console.log(`⚠️ SMS failed: ${smsResult.error}`);
+        }
+      } catch (smsError) {
+        console.error('SMS notification error:', smsError);
+        // Don't fail the request if SMS fails
+      }
+    }
+
     // TODO: Send email notification to landlord
+    // TODO: Send SMS to landlord about new application
     // TODO: Trigger credit/background checks if payment received
 
     return NextResponse.json({
