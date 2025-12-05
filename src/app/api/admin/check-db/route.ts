@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAdminSession } from '@/lib/admin-session';
 
+// Version 2 - Added add-mfa-columns action and userColumns check
+
 /**
  * GET /api/admin/check-db
  * Check database tables and their status (admin only)
@@ -72,6 +74,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      version: 2,
       tables,
       userColumns,
       recentMigrations: recentMigrations.map((m: any) => ({
