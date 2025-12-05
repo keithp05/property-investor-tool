@@ -4,11 +4,11 @@ import { format } from "date-fns";
 import Link from "next/link";
 
 type PageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function ApplicationDetailPage({ params }: PageProps) {
-  const { id } = params;
+  const { id } = await params;
 
   const application = await prisma.tenantApplication.findUnique({
     where: { id },
