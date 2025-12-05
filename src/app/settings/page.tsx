@@ -2,20 +2,62 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
   Loader2, Shield, ShieldCheck, ShieldOff, Key, 
-  Eye, EyeOff, X, Check, AlertTriangle, Copy
+  Eye, EyeOff, X, Check, AlertTriangle, Copy,
+  Calendar, Link2, Unlink, CheckCircle2, XCircle
 } from 'lucide-react';
+
+// Calendar provider icons
+const GoogleIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+  </svg>
+);
+
+const MicrosoftIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <path fill="#F25022" d="M1 1h10v10H1z"/>
+    <path fill="#00A4EF" d="M1 13h10v10H1z"/>
+    <path fill="#7FBA00" d="M13 1h10v10H13z"/>
+    <path fill="#FFB900" d="M13 13h10v10H13z"/>
+  </svg>
+);
+
+interface CalendarStatus {
+  google: {
+    connected: boolean;
+    email?: string;
+    connectedAt?: string;
+  };
+  microsoft: {
+    connected: boolean;
+    email?: string;
+    connectedAt?: string;
+  };
+}
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaVerifiedAt, setMfaVerifiedAt] = useState<string | null>(null);
+
+  // Calendar State
+  const [calendarStatus, setCalendarStatus] = useState<CalendarStatus>({
+    google: { connected: false },
+    microsoft: { connected: false },
+  });
+  const [calendarLoading, setCalendarLoading] = useState<'google' | 'microsoft' | null>(null);
+  const [calendarMessage, setCalendarMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // MFA Setup
   const [showMfaSetup, setShowMfaSetup] = useState(false);
@@ -39,8 +81,37 @@ export default function SettingsPage() {
       router.push('/login');
     } else if (status === 'authenticated') {
       loadMfaStatus();
+      loadCalendarStatus();
+      handleCalendarCallback();
     }
   }, [status]);
+
+  // Handle calendar OAuth callback messages
+  function handleCalendarCallback() {
+    const calendarResult = searchParams.get('calendar');
+    const provider = searchParams.get('provider');
+    const message = searchParams.get('message');
+
+    if (calendarResult === 'success') {
+      setCalendarMessage({
+        type: 'success',
+        text: `${provider === 'google' ? 'Google' : 'Microsoft'} Calendar connected successfully!`,
+      });
+      // Clear URL params
+      router.replace('/settings');
+    } else if (calendarResult === 'error') {
+      setCalendarMessage({
+        type: 'error',
+        text: message || 'Failed to connect calendar',
+      });
+      router.replace('/settings');
+    }
+
+    // Clear message after 5 seconds
+    if (calendarResult) {
+      setTimeout(() => setCalendarMessage(null), 5000);
+    }
+  }
 
   async function loadMfaStatus() {
     try {
@@ -55,6 +126,80 @@ export default function SettingsPage() {
       console.error('Failed to load MFA status:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadCalendarStatus() {
+    try {
+      const response = await fetch('/api/calendar');
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.error);
+      
+      setCalendarStatus(data);
+    } catch (err) {
+      console.error('Failed to load calendar status:', err);
+    }
+  }
+
+  async function connectCalendar(provider: 'google' | 'microsoft') {
+    setCalendarLoading(provider);
+    
+    try {
+      const response = await fetch(`/api/calendar/${provider}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to connect ${provider} calendar`);
+      }
+      
+      // Redirect to OAuth
+      window.location.href = data.authUrl;
+    } catch (err: any) {
+      setCalendarMessage({
+        type: 'error',
+        text: err.message || `Failed to connect ${provider} calendar`,
+      });
+      setCalendarLoading(null);
+    }
+  }
+
+  async function disconnectCalendar(provider: 'google' | 'microsoft') {
+    if (!confirm(`Are you sure you want to disconnect your ${provider === 'google' ? 'Google' : 'Microsoft'} Calendar?`)) {
+      return;
+    }
+
+    setCalendarLoading(provider);
+    
+    try {
+      const response = await fetch('/api/calendar', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to disconnect calendar');
+      }
+      
+      setCalendarStatus(prev => ({
+        ...prev,
+        [provider]: { connected: false },
+      }));
+      
+      setCalendarMessage({
+        type: 'success',
+        text: `${provider === 'google' ? 'Google' : 'Microsoft'} Calendar disconnected`,
+      });
+    } catch (err: any) {
+      setCalendarMessage({
+        type: 'error',
+        text: err.message || 'Failed to disconnect calendar',
+      });
+    } finally {
+      setCalendarLoading(null);
     }
   }
 
@@ -165,6 +310,28 @@ export default function SettingsPage() {
       <div className="max-w-2xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Account Settings</h1>
 
+        {/* Calendar Message Toast */}
+        {calendarMessage && (
+          <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+            calendarMessage.type === 'success' 
+              ? 'bg-green-50 text-green-800 border border-green-200' 
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {calendarMessage.type === 'success' ? (
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+            ) : (
+              <XCircle className="h-5 w-5 text-red-600" />
+            )}
+            <span>{calendarMessage.text}</span>
+            <button 
+              onClick={() => setCalendarMessage(null)}
+              className="ml-auto text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Profile Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile</h2>
@@ -181,7 +348,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Security Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">Security</h2>
 
           {/* MFA */}
@@ -230,6 +397,131 @@ export default function SettingsPage() {
               {setupError}
             </div>
           )}
+        </div>
+
+        {/* Calendar Integrations Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Calendar className="h-5 w-5 text-indigo-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Calendar Integrations</h2>
+          </div>
+          
+          <p className="text-sm text-gray-500 mb-6">
+            Connect your calendar to sync property showings, maintenance appointments, lease signings, and rent reminders.
+          </p>
+
+          <div className="space-y-4">
+            {/* Google Calendar */}
+            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition">
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-gray-50 rounded-lg">
+                  <GoogleIcon />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">Google Calendar</h3>
+                  {calendarStatus.google.connected ? (
+                    <p className="text-sm text-green-600 flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      Connected as {calendarStatus.google.email}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500">Not connected</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                {calendarStatus.google.connected ? (
+                  <button
+                    onClick={() => disconnectCalendar('google')}
+                    disabled={calendarLoading === 'google'}
+                    className="px-4 py-2 text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition text-sm font-medium flex items-center gap-2"
+                  >
+                    {calendarLoading === 'google' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Unlink className="h-4 w-4" />
+                    )}
+                    Disconnect
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => connectCalendar('google')}
+                    disabled={calendarLoading === 'google'}
+                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium flex items-center gap-2"
+                  >
+                    {calendarLoading === 'google' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Link2 className="h-4 w-4" />
+                    )}
+                    Connect
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Microsoft Calendar */}
+            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition">
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-gray-50 rounded-lg">
+                  <MicrosoftIcon />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">Microsoft Outlook</h3>
+                  {calendarStatus.microsoft.connected ? (
+                    <p className="text-sm text-green-600 flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      Connected as {calendarStatus.microsoft.email}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500">Not connected</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                {calendarStatus.microsoft.connected ? (
+                  <button
+                    onClick={() => disconnectCalendar('microsoft')}
+                    disabled={calendarLoading === 'microsoft'}
+                    className="px-4 py-2 text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition text-sm font-medium flex items-center gap-2"
+                  >
+                    {calendarLoading === 'microsoft' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Unlink className="h-4 w-4" />
+                    )}
+                    Disconnect
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => connectCalendar('microsoft')}
+                    disabled={calendarLoading === 'microsoft'}
+                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium flex items-center gap-2"
+                  >
+                    {calendarLoading === 'microsoft' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Link2 className="h-4 w-4" />
+                    )}
+                    Connect
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Calendar Features Info */}
+          <div className="mt-6 p-4 bg-indigo-50 rounded-lg">
+            <h4 className="font-medium text-indigo-900 mb-2">What syncs to your calendar?</h4>
+            <ul className="text-sm text-indigo-700 space-y-1">
+              <li>• Property showings with prospective tenants</li>
+              <li>• Maintenance appointments</li>
+              <li>• Lease signing meetings</li>
+              <li>• Rent due date reminders</li>
+              <li>• Lease expiration notifications</li>
+              <li>• Property inspections (move-in, move-out, HQS)</li>
+            </ul>
+          </div>
         </div>
       </div>
 
