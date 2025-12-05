@@ -10,6 +10,7 @@ function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  const rememberMe = searchParams.get('remember') === '1';
 
   const [status, setStatus] = useState<'verifying' | 'mfa' | 'success' | 'error'>('verifying');
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +60,7 @@ function VerifyContent() {
       const result = await signIn('magic-link', {
         token,
         mfaCode: mfaCodeValue || '',
+        rememberMe: rememberMe ? 'true' : 'false',
         redirect: false,
       });
 
@@ -171,6 +173,12 @@ function VerifyContent() {
                   )}
                 </button>
               </form>
+
+              {rememberMe && (
+                <p className="text-xs text-gray-500 mt-4 text-center">
+                  You'll stay signed in for 30 days, but will need to verify your identity every 24 hours.
+                </p>
+              )}
             </div>
           </div>
         )}

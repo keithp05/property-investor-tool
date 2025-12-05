@@ -12,7 +12,7 @@ const BASE_URL = process.env.NEXTAUTH_URL || 'https://develop.d3q1fuby25122q.amp
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email } = body;
+    const { email, rememberMe = false } = body;
 
     if (!email) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     // Generate token
     const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
     const ipAddress = request.headers.get('x-forwarded-for') || 
                       request.headers.get('x-real-ip') || 
@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Send email
-    const magicLinkUrl = `${BASE_URL}/auth/magic-link/verify?token=${token}`;
+    // Send email - include rememberMe as query parameter
+    const magicLinkUrl = `${BASE_URL}/auth/magic-link/verify?token=${token}${rememberMe ? '&remember=1' : ''}`;
 
     const emailResult = await sendMagicLinkEmail(
       normalizedEmail,

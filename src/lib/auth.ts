@@ -3,6 +3,12 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { prisma } from './prisma';
+import { authenticator } from 'otplib';
+
+// Session durations
+const SESSION_DURATION_DEFAULT = 24 * 60 * 60; // 1 day in seconds
+const SESSION_DURATION_REMEMBER = 30 * 24 * 60 * 60; // 30 days in seconds
+const MFA_REAUTH_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
@@ -14,6 +20,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        rememberMe: { label: 'Remember Me', type: 'text' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -76,6 +83,8 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           subscriptionTier: user.subscriptionTier,
           subscriptionStatus: user.subscriptionStatus,
+          rememberMe: credentials.rememberMe === 'true',
+          lastMfaVerifiedAt: Date.now(),
         };
       },
     }),
@@ -87,6 +96,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         token: { label: 'Token', type: 'text' },
         mfaCode: { label: 'MFA Code', type: 'text' },
+        rememberMe: { label: 'Remember Me', type: 'text' },
       },
       async authorize(credentials) {
         if (!credentials?.token) {
@@ -121,45 +131,24 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Get the user - try with MFA columns
+          // Get the user - use raw query to handle MFA columns
           let user: any;
-          try {
-            user = await prisma.user.findUnique({
-              where: { email: magicLink.email },
-              select: {
-                id: true,
-                email: true,
-                name: true,
-                role: true,
-                subscriptionTier: true,
-                subscriptionStatus: true,
-                isActive: true,
-                isSuspended: true,
-                mfaEnabled: true,
-                mfaSecret: true,
-              },
-            });
-          } catch (e) {
-            // Fall back to basic columns
-            user = await prisma.user.findUnique({
-              where: { email: magicLink.email },
-              select: {
-                id: true,
-                email: true,
-                name: true,
-                role: true,
-                subscriptionTier: true,
-                subscriptionStatus: true,
-              },
-            });
-          }
+          const users = await prisma.$queryRaw<any[]>`
+            SELECT id, email, name, role, "subscriptionTier", "subscriptionStatus",
+                   "isActive", "isSuspended", "mfaEnabled", "mfaSecret"
+            FROM "User"
+            WHERE email = ${magicLink.email}
+            LIMIT 1
+          `;
+          
+          user = users[0];
 
           if (!user) {
             console.log('Magic link login failed: User not found');
             return null;
           }
 
-          // Check active status if columns exist
+          // Check active status
           if (user.isActive === false || user.isSuspended === true) {
             console.log('Magic link login failed: User not active');
             return null;
@@ -172,7 +161,6 @@ export const authOptions: NextAuthOptions = {
               return null;
             }
 
-            const { authenticator } = await import('otplib');
             const isValidCode = authenticator.verify({
               token: credentials.mfaCode,
               secret: user.mfaSecret,
@@ -182,6 +170,8 @@ export const authOptions: NextAuthOptions = {
               console.log('Magic link login failed: Invalid MFA code');
               return null;
             }
+            
+            console.log('MFA verification successful for:', user.email);
           }
 
           // Mark magic link as used
@@ -195,13 +185,11 @@ export const authOptions: NextAuthOptions = {
 
           // Update last login
           try {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: {
-                lastLoginAt: new Date(),
-                loginCount: { increment: 1 },
-              },
-            });
+            await prisma.$executeRaw`
+              UPDATE "User" 
+              SET "lastLoginAt" = NOW(), "loginCount" = "loginCount" + 1
+              WHERE id = ${user.id}
+            `;
           } catch (e) {
             console.log('Could not update login stats');
           }
@@ -215,6 +203,9 @@ export const authOptions: NextAuthOptions = {
             role: user.role,
             subscriptionTier: user.subscriptionTier,
             subscriptionStatus: user.subscriptionStatus,
+            rememberMe: credentials.rememberMe === 'true',
+            lastMfaVerifiedAt: user.mfaEnabled ? Date.now() : null,
+            mfaEnabled: user.mfaEnabled || false,
           };
         } catch (error) {
           console.error('Magic link authorize error:', error);
@@ -225,6 +216,7 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: 'jwt',
+    maxAge: SESSION_DURATION_DEFAULT, // Default, will be overridden by jwt callback
   },
   pages: {
     signIn: '/login',
@@ -232,13 +224,28 @@ export const authOptions: NextAuthOptions = {
     error: '/login',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
         token.subscriptionTier = (user as any).subscriptionTier;
         token.subscriptionStatus = (user as any).subscriptionStatus;
+        token.rememberMe = (user as any).rememberMe || false;
+        token.lastMfaVerifiedAt = (user as any).lastMfaVerifiedAt || null;
+        token.mfaEnabled = (user as any).mfaEnabled || false;
+        
+        // Set expiration based on remember me
+        if ((user as any).rememberMe) {
+          token.exp = Math.floor(Date.now() / 1000) + SESSION_DURATION_REMEMBER;
+        }
       }
+      
+      // Check if MFA re-verification is needed (for users with MFA enabled)
+      if (token.mfaEnabled && token.lastMfaVerifiedAt) {
+        const timeSinceLastMfa = Date.now() - (token.lastMfaVerifiedAt as number);
+        token.mfaReauthRequired = timeSinceLastMfa > MFA_REAUTH_INTERVAL;
+      }
+      
       return token;
     },
     async session({ session, token }) {
@@ -247,6 +254,8 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).role = token.role;
         (session.user as any).subscriptionTier = token.subscriptionTier;
         (session.user as any).subscriptionStatus = token.subscriptionStatus;
+        (session.user as any).mfaEnabled = token.mfaEnabled;
+        (session.user as any).mfaReauthRequired = token.mfaReauthRequired || false;
       }
       return session;
     },

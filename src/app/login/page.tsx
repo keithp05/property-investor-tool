@@ -18,6 +18,7 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   // Check URL for method parameter
   useEffect(() => {
@@ -36,6 +37,7 @@ function LoginForm() {
       const result = await signIn('credentials', {
         email,
         password,
+        rememberMe: rememberMe ? 'true' : 'false',
         redirect: false,
       });
 
@@ -61,7 +63,7 @@ function LoginForm() {
       const response = await fetch('/api/auth/magic-link/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, rememberMe }),
       });
 
       const data = await response.json();
@@ -191,6 +193,19 @@ function LoginForm() {
                   </div>
                 </div>
 
+                <div className="flex items-center">
+                  <input 
+                    type="checkbox" 
+                    id="remember-magic"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" 
+                  />
+                  <label htmlFor="remember-magic" className="ml-2 text-sm text-gray-600">
+                    Remember me for 30 days
+                  </label>
+                </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -252,8 +267,13 @@ function LoginForm() {
 
                 <div className="flex items-center justify-between">
                   <label className="flex items-center">
-                    <input type="checkbox" className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                    <span className="ml-2 text-sm text-gray-600">Remember me</span>
+                    <input 
+                      type="checkbox" 
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" 
+                    />
+                    <span className="ml-2 text-sm text-gray-600">Remember me for 30 days</span>
                   </label>
                   <Link href="/auth/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-700">
                     Forgot password?
