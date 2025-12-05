@@ -2,56 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import crypto from 'crypto';
+import { authenticator } from 'otplib';
 
-// Version 4 - Client-side QR code generation using qrcode.react
+// Version 5 - Using otplib for proper TOTP implementation
 
-// Generate a random Base32 secret for TOTP
-function generateSecret(): string {
-  const buffer = crypto.randomBytes(20);
-  const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let secret = '';
-  for (let i = 0; i < buffer.length; i++) {
-    secret += base32chars[buffer[i] % 32];
-  }
-  return secret;
-}
-
-// Verify TOTP code
-function verifyTOTP(secret: string, code: string): boolean {
-  for (let i = -1; i <= 1; i++) {
-    const time = Math.floor(Date.now() / 1000 / 30) + i;
-    const timeBuffer = Buffer.alloc(8);
-    timeBuffer.writeBigInt64BE(BigInt(time));
-
-    const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    let bits = '';
-    for (const char of secret.toUpperCase()) {
-      const val = base32chars.indexOf(char);
-      if (val === -1) continue;
-      bits += val.toString(2).padStart(5, '0');
-    }
-    const secretBuffer = Buffer.alloc(Math.ceil(bits.length / 8));
-    for (let j = 0; j < secretBuffer.length; j++) {
-      secretBuffer[j] = parseInt(bits.slice(j * 8, (j + 1) * 8).padEnd(8, '0'), 2);
-    }
-
-    const hmac = crypto.createHmac('sha1', secretBuffer);
-    hmac.update(timeBuffer);
-    const hash = hmac.digest();
-
-    const offset = hash[hash.length - 1] & 0xf;
-    const expectedCode = ((hash[offset] & 0x7f) << 24 |
-                          (hash[offset + 1] & 0xff) << 16 |
-                          (hash[offset + 2] & 0xff) << 8 |
-                          (hash[offset + 3] & 0xff)) % 1000000;
-
-    if (code === expectedCode.toString().padStart(6, '0')) {
-      return true;
-    }
-  }
-  return false;
-}
+// Configure authenticator
+authenticator.options = {
+  digits: 6,
+  step: 30,
+  window: 1, // Allow 1 step before/after for clock drift
+};
 
 /**
  * GET /api/user/mfa
@@ -81,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      version: 4,
+      version: 5,
       mfaEnabled: user.mfaEnabled || false,
       mfaVerifiedAt: user.mfaVerifiedAt,
     });
@@ -124,8 +84,8 @@ export async function POST(request: NextRequest) {
     const user = users[0];
 
     if (action === 'setup') {
-      // Generate new secret
-      const secret = generateSecret();
+      // Generate new secret using otplib
+      const secret = authenticator.generateSecret();
       
       // Store secret using raw query
       await prisma.$executeRaw`
@@ -134,11 +94,12 @@ export async function POST(request: NextRequest) {
         WHERE id = ${user.id}
       `;
 
-      // Generate otpauth URL (client will generate QR code)
+      // Generate otpauth URL using otplib
       const issuer = 'RentalIQ';
-      const accountName = encodeURIComponent(user.email);
-      const encodedIssuer = encodeURIComponent(issuer);
-      const otpauthUrl = `otpauth://totp/${encodedIssuer}:${accountName}?secret=${secret}&issuer=${encodedIssuer}&algorithm=SHA1&digits=6&period=30`;
+      const otpauthUrl = authenticator.keyuri(user.email, issuer, secret);
+
+      console.log('MFA Setup - Generated secret for:', user.email);
+      console.log('MFA Setup - otpauth URL:', otpauthUrl);
 
       return NextResponse.json({
         success: true,
@@ -157,9 +118,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'MFA not setup. Please start setup first.' }, { status: 400 });
       }
 
-      // Verify the code
-      if (!verifyTOTP(user.mfaSecret, code)) {
-        return NextResponse.json({ success: false, error: 'Invalid code. Please try again.' }, { status: 400 });
+      console.log('MFA Verify - Checking code for:', user.email);
+      console.log('MFA Verify - Secret:', user.mfaSecret);
+      console.log('MFA Verify - Code provided:', code);
+
+      // Verify the code using otplib
+      const isValid = authenticator.verify({
+        token: code,
+        secret: user.mfaSecret,
+      });
+
+      console.log('MFA Verify - Is valid:', isValid);
+
+      // Also check what the current valid code should be
+      const currentToken = authenticator.generate(user.mfaSecret);
+      console.log('MFA Verify - Current expected token:', currentToken);
+
+      if (!isValid) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Invalid code. Please try again.',
+          debug: `Expected: ${currentToken}, Got: ${code}`
+        }, { status: 400 });
       }
 
       // Enable MFA using raw query
@@ -168,6 +148,8 @@ export async function POST(request: NextRequest) {
         SET "mfaEnabled" = true, "mfaVerifiedAt" = NOW()
         WHERE id = ${user.id}
       `;
+
+      console.log('MFA Verify - MFA enabled successfully for:', user.email);
 
       return NextResponse.json({
         success: true,
