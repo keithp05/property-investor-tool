@@ -8,28 +8,54 @@ type PageProps = {
 };
 
 export default async function ApplicationDetailPage({ params }: PageProps) {
-  const { id } = await params;
+  let application;
+  
+  try {
+    const { id } = await params;
 
-  const application = await prisma.tenantApplication.findUnique({
-    where: { id },
-    include: {
-      property: true,
-      landlord: true,
-    },
-  });
+    application = await prisma.tenantApplication.findUnique({
+      where: { id },
+      include: {
+        property: true,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching application:", error);
+    return (
+      <div className="max-w-5xl mx-auto py-8 px-4">
+        <Link href="/tenants" className="text-indigo-600 hover:underline text-sm">
+          ← Back to Applications
+        </Link>
+        <div className="mt-8 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <h1 className="text-xl font-semibold text-red-800">Error Loading Application</h1>
+          <p className="text-red-600 mt-2">There was an error loading this application. Please try again.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!application) {
     notFound();
   }
 
-  const formatDate = (value: Date | null | undefined) =>
-    value ? format(value, "MMM d, yyyy") : "N/A";
+  const formatDate = (value: Date | null | undefined) => {
+    try {
+      return value ? format(value, "MMM d, yyyy") : "N/A";
+    } catch {
+      return "N/A";
+    }
+  };
 
   const formatMoney = (value: number | null | undefined) =>
     typeof value === "number" ? `$${value.toLocaleString()}` : "N/A";
 
-  const formatDecimalMoney = (value: any) =>
-    value != null ? `$${Number(value).toLocaleString()}` : "N/A";
+  const formatDecimalMoney = (value: any) => {
+    try {
+      return value != null ? `$${Number(value).toLocaleString()}` : "N/A";
+    } catch {
+      return "N/A";
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 space-y-6">
