@@ -6,11 +6,12 @@
 import { SNSClient, PublishCommand, PublishCommandInput } from '@aws-sdk/client-sns';
 
 // Initialize SNS client
+// Uses SNS_* prefix for Amplify compatibility (Amplify blocks AWS_* prefix)
 const snsClient = new SNSClient({
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    accessKeyId: process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
   },
 });
 
@@ -54,8 +55,11 @@ export async function sendSMS(
   message: string,
   senderId?: string
 ): Promise<SMSResult> {
-  // Check if AWS credentials are configured
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+  // Check if AWS credentials are configured (supports both AWS_* and SNS_* prefixes)
+  const accessKey = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+  const secretKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  
+  if (!accessKey || !secretKey) {
     console.error('AWS credentials not configured for SMS');
     return {
       success: false,
