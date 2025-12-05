@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
-// Version 3 - Using raw SQL queries, columns confirmed to exist
+// Version 4 - Client-side QR code generation using qrcode.react
 
 // Generate a random Base32 secret for TOTP
 function generateSecret(): string {
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      version: 3,
+      version: 4,
       mfaEnabled: user.mfaEnabled || false,
       mfaVerifiedAt: user.mfaVerifiedAt,
     });
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/user/mfa
- * Setup MFA - generate secret and QR code
+ * Setup MFA - generate secret and otpauth URL
  */
 export async function POST(request: NextRequest) {
   try {
@@ -134,14 +134,16 @@ export async function POST(request: NextRequest) {
         WHERE id = ${user.id}
       `;
 
-      // Generate QR code URL
+      // Generate otpauth URL (client will generate QR code)
       const issuer = 'RentalIQ';
-      const otpauthUrl = `otpauth://totp/${issuer}:${user.email}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+      const accountName = encodeURIComponent(user.email);
+      const encodedIssuer = encodeURIComponent(issuer);
+      const otpauthUrl = `otpauth://totp/${encodedIssuer}:${accountName}?secret=${secret}&issuer=${encodedIssuer}&algorithm=SHA1&digits=6&period=30`;
 
       return NextResponse.json({
         success: true,
         secret,
-        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`,
+        otpauthUrl,
         manualEntry: secret,
       });
     }

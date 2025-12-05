@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
   Loader2, Shield, ShieldCheck, ShieldOff, Key, 
-  Eye, EyeOff, X, Check, AlertTriangle, Copy, CheckCircle
+  Eye, EyeOff, X, Check, AlertTriangle, Copy
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -20,7 +21,7 @@ export default function SettingsPage() {
   const [showMfaSetup, setShowMfaSetup] = useState(false);
   const [setupStep, setSetupStep] = useState<'qr' | 'verify'>('qr');
   const [mfaSecret, setMfaSecret] = useState('');
-  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [otpauthUrl, setOtpauthUrl] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupError, setSetupError] = useState('');
@@ -72,7 +73,7 @@ export default function SettingsPage() {
 
       if (data.success) {
         setMfaSecret(data.secret);
-        setQrCodeUrl(data.qrCodeUrl);
+        setOtpauthUrl(data.otpauthUrl);
         setShowMfaSetup(true);
         setSetupStep('qr');
       } else {
@@ -251,7 +252,16 @@ export default function SettingsPage() {
                   </p>
 
                   <div className="flex justify-center mb-6">
-                    <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 rounded-lg border" />
+                    <div className="p-4 bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+                      {otpauthUrl && (
+                        <QRCodeSVG
+                          value={otpauthUrl}
+                          size={200}
+                          level="M"
+                          includeMargin={true}
+                        />
+                      )}
+                    </div>
                   </div>
 
                   <div className="bg-gray-50 rounded-lg p-4 mb-6">
