@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User, Wrench, LayoutDashboard, PiggyBank, Shield } from 'lucide-react';
+import { Home, Search, Users, DollarSign, FileText, Menu, X, LogOut, User, Wrench, LayoutDashboard, PiggyBank, Shield, Settings } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Navbar() {
@@ -102,6 +102,17 @@ export default function Navbar() {
                     </span>
                   </div>
                 </div>
+                <Link
+                  href="/settings"
+                  className={`p-2 rounded-md transition-all ${
+                    isActive('/settings')
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                  title="Settings"
+                >
+                  <Settings className="h-5 w-5" />
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all"
@@ -189,6 +200,20 @@ export default function Navbar() {
                     </span>
                   </div>
                 </div>
+                <Link
+                  href="/settings"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`
+                    flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium transition-all
+                    ${isActive('/settings')
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                    }
+                  `}
+                >
+                  <Settings className="h-5 w-5" />
+                  <span>Settings</span>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50 transition-all"
