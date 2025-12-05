@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { hudApiService } from './hudApiService';
 import { strDataService, STRPropertyProjection, STRMarketData } from './strDataService';
+import { crimeDataService, CrimeReport } from './crimeDataService';
 import { analyzeDeal, DealInputs, DealAnalysis } from '@/lib/investmentCalculations';
 
 // Initialize OpenAI client
@@ -199,50 +200,58 @@ class PropertyAnalysisService {
   }
 
   /**
-   * Get crime score for location
+   * Get crime score for location using crimeDataService
    */
   private async getCrimeScore(property: any): Promise<CrimeScore> {
-    // TODO: Integrate real crime data API (SpotCrime, FBI Crime Data, etc.)
-    const scoreNumber = 60 + Math.random() * 35;
+    try {
+      // Use the new crime data service for comprehensive crime analysis
+      const crimeReport = await crimeDataService.getCrimeReport(
+        property.address || '',
+        property.city || 'Unknown',
+        property.state || 'TX',
+        property.zipCode || '00000',
+        property.latitude,
+        property.longitude
+      );
 
-    let overallScore: 'A' | 'B' | 'C' | 'D' | 'F';
-    if (scoreNumber >= 90) overallScore = 'A';
-    else if (scoreNumber >= 80) overallScore = 'B';
-    else if (scoreNumber >= 70) overallScore = 'C';
-    else if (scoreNumber >= 60) overallScore = 'D';
-    else overallScore = 'F';
+      // Convert CrimeReport to CrimeScore format for backwards compatibility
+      return {
+        overallScore: crimeReport.overallScore,
+        scoreNumber: crimeReport.scoreNumber,
+        violentCrimeRate: crimeReport.statistics.violentCrimeRate,
+        propertyCrimeRate: crimeReport.statistics.propertyCrimeRate,
+        comparison: crimeReport.vsNationalAverage > 0
+          ? `${crimeReport.vsNationalAverage}% safer than national average`
+          : `${Math.abs(crimeReport.vsNationalAverage)}% higher crime than national average`,
+        nearbyIncidents: crimeReport.recentIncidents.slice(0, 7).map(incident => ({
+          type: incident.type,
+          date: incident.date,
+          distance: incident.distance,
+        })),
+        recommendation: crimeReport.recommendation,
+      };
+    } catch (error) {
+      console.error('Crime data service error, using fallback:', error);
+      // Fallback to basic estimation
+      return this.getFallbackCrimeScore(property);
+    }
+  }
 
-    const violentCrimeRate = +(2 + Math.random() * 3).toFixed(1);
-    const propertyCrimeRate = +(10 + Math.random() * 15).toFixed(1);
-
-    const nationalAvgViolent = 3.8;
-    const percentDiff = Math.round(((nationalAvgViolent - violentCrimeRate) / nationalAvgViolent) * 100);
-    const comparison = percentDiff > 0
-      ? `${percentDiff}% safer than national average`
-      : `${Math.abs(percentDiff)}% higher crime than national average`;
-
-    const crimeTypes = ['Theft', 'Burglary', 'Vandalism', 'Assault', 'Vehicle Theft', 'Robbery'];
-    const nearbyIncidents = Array.from({ length: 3 + Math.floor(Math.random() * 4) }, () => ({
-      type: crimeTypes[Math.floor(Math.random() * crimeTypes.length)],
-      date: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      distance: +(Math.random() * 1.5).toFixed(2),
-    }));
-
-    let recommendation = '';
-    if (overallScore === 'A') recommendation = 'Excellent safety rating. Very low crime area ideal for families and long-term investment.';
-    else if (overallScore === 'B') recommendation = 'Good safety rating. Below average crime rates make this a solid investment area.';
-    else if (overallScore === 'C') recommendation = 'Average safety rating. Crime rates are moderate. Consider security measures for rental properties.';
-    else if (overallScore === 'D') recommendation = 'Below average safety rating. Higher crime rates may affect property values and rental demand.';
-    else recommendation = 'Poor safety rating. High crime area may present challenges for rental management and property values.';
+  /**
+   * Fallback crime score if service fails
+   */
+  private getFallbackCrimeScore(property: any): CrimeScore {
+    const scoreNumber = 65 + Math.random() * 25;
+    const overallScore = scoreNumber >= 85 ? 'A' : scoreNumber >= 70 ? 'B' : scoreNumber >= 55 ? 'C' : scoreNumber >= 40 ? 'D' : 'F';
 
     return {
-      overallScore,
+      overallScore: overallScore as any,
       scoreNumber: Math.round(scoreNumber),
-      violentCrimeRate,
-      propertyCrimeRate,
-      comparison,
-      nearbyIncidents,
-      recommendation,
+      violentCrimeRate: 3.5,
+      propertyCrimeRate: 18.0,
+      comparison: 'Unable to compare - using estimated data',
+      nearbyIncidents: [],
+      recommendation: 'Limited crime data available. Recommend local research before investing.',
     };
   }
 
