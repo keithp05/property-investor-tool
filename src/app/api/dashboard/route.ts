@@ -27,10 +27,21 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user?.landlordProfile) {
-      return NextResponse.json(
-        { success: false, error: 'Landlord profile not found' },
-        { status: 404 }
-      );
+      // Return empty dashboard for non-landlords
+      return NextResponse.json({
+        success: true,
+        stats: {
+          totalProperties: 0,
+          occupiedProperties: 0,
+          vacantProperties: 0,
+          monthlyRevenue: 0,
+          openMaintenanceRequests: 0,
+          rentStatus: { paid: 0, pending: 0, overdue: 0 },
+        },
+        properties: [],
+        recentMaintenance: [],
+        message: 'No landlord profile found',
+      });
     }
 
     const landlordId = user.landlordProfile.id;
@@ -75,14 +86,14 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Calculate statistics
+    // Calculate statistics - using RENTED status (not OCCUPIED)
     const totalProperties = properties.length;
-    const occupiedProperties = properties.filter(p => p.status === 'OCCUPIED').length;
+    const occupiedProperties = properties.filter(p => p.status === 'RENTED').length;
     const vacantProperties = properties.filter(p => p.status === 'VACANT').length;
 
-    // Calculate monthly revenue (sum of all monthly rent for occupied properties)
+    // Calculate monthly revenue (sum of all monthly rent for rented properties)
     const monthlyRevenue = properties
-      .filter(p => p.status === 'OCCUPIED' && p.monthlyRent)
+      .filter(p => p.status === 'RENTED' && p.monthlyRent)
       .reduce((sum, p) => sum + Number(p.monthlyRent || 0), 0);
 
     // Count maintenance requests
@@ -103,16 +114,16 @@ export async function GET(request: NextRequest) {
 
     const paidRentCount = allRentPayments.filter(p => p.status === 'PAID').length;
     const pendingRentCount = allRentPayments.filter(p => p.status === 'PENDING').length;
-    const overdueRentCount = allRentPayments.filter(p => p.status === 'OVERDUE').length;
+    const overdueRentCount = allRentPayments.filter(p => p.status === 'OVERDUE' || p.status === 'LATE').length;
 
     // Build property cards with alerts
     const propertyCards = properties.map(property => {
-      const alerts = [];
+      const alerts: any[] = [];
 
       // Check for maintenance requests
       if (property.maintenanceRequests.length > 0) {
         const urgentCount = property.maintenanceRequests.filter(
-          m => m.priority === 'HIGH' || m.priority === 'URGENT'
+          m => m.priority === 'HIGH' || m.priority === 'EMERGENCY'
         ).length;
 
         alerts.push({
@@ -132,7 +143,7 @@ export async function GET(request: NextRequest) {
         );
 
         if (currentMonthPayment) {
-          if (currentMonthPayment.status === 'OVERDUE') {
+          if (currentMonthPayment.status === 'OVERDUE' || currentMonthPayment.status === 'LATE') {
             const daysLate = Math.floor(
               (now.getTime() - currentMonthPayment.dueDate.getTime()) / (1000 * 60 * 60 * 24)
             );
@@ -190,7 +201,7 @@ export async function GET(request: NextRequest) {
         estimatedValue: property.estimatedValue ? Number(property.estimatedValue) : null,
         monthlyMortgage: property.monthlyMortgage ? Number(property.monthlyMortgage) : null,
         mortgageBalance: property.mortgageBalance ? Number(property.mortgageBalance) : null,
-        tenant: property.currentTenancy ? {
+        tenant: property.currentTenancy?.tenantProfile?.user ? {
           name: property.currentTenancy.tenantProfile.user.name,
           email: property.currentTenancy.tenantProfile.user.email,
           leaseEndDate: property.currentTenancy.leaseEndDate,
@@ -202,49 +213,65 @@ export async function GET(request: NextRequest) {
 
     // Sort properties by alert severity (urgent first)
     propertyCards.sort((a, b) => {
-      const aUrgent = a.alerts.filter(al => al.severity === 'urgent').length;
-      const bUrgent = b.alerts.filter(al => al.severity === 'urgent').length;
+      const aUrgent = a.alerts.filter((al: any) => al.severity === 'urgent').length;
+      const bUrgent = b.alerts.filter((al: any) => al.severity === 'urgent').length;
       if (aUrgent !== bUrgent) return bUrgent - aUrgent;
 
-      const aWarning = a.alerts.filter(al => al.severity === 'warning').length;
-      const bWarning = b.alerts.filter(al => al.severity === 'warning').length;
+      const aWarning = a.alerts.filter((al: any) => al.severity === 'warning').length;
+      const bWarning = b.alerts.filter((al: any) => al.severity === 'warning').length;
       return bWarning - aWarning;
     });
 
     // Get recent maintenance requests across all properties
-    const recentMaintenance = await prisma.maintenanceRequest.findMany({
-      where: {
-        property: { landlordId },
-        status: { in: ['OPEN', 'IN_PROGRESS'] },
-      },
-      include: {
-        property: {
-          select: {
-            address: true,
-            city: true,
-            state: true,
-          },
+    let recentMaintenance: any[] = [];
+    try {
+      const maintenanceData = await prisma.maintenanceRequest.findMany({
+        where: {
+          property: { landlordId },
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
         },
-        tenant: {
-          include: {
-            tenantProfile: {
-              include: {
-                user: {
-                  select: {
-                    name: true,
+        include: {
+          property: {
+            select: {
+              address: true,
+              city: true,
+              state: true,
+            },
+          },
+          tenant: {
+            include: {
+              tenantProfile: {
+                include: {
+                  user: {
+                    select: {
+                      name: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-      orderBy: [
-        { priority: 'desc' },
-        { createdAt: 'desc' },
-      ],
-      take: 10,
-    });
+        orderBy: [
+          { priority: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: 10,
+      });
+
+      recentMaintenance = maintenanceData.map(m => ({
+        id: m.id,
+        title: m.title,
+        description: m.description,
+        priority: m.priority,
+        status: m.status,
+        property: `${m.property.address}, ${m.property.city}, ${m.property.state}`,
+        tenant: m.tenant?.tenantProfile?.user?.name || 'Unknown',
+        createdAt: m.createdAt,
+      }));
+    } catch (e) {
+      console.log('Could not fetch maintenance requests:', e);
+    }
 
     return NextResponse.json({
       success: true,
@@ -261,16 +288,7 @@ export async function GET(request: NextRequest) {
         },
       },
       properties: propertyCards,
-      recentMaintenance: recentMaintenance.map(m => ({
-        id: m.id,
-        title: m.title,
-        description: m.description,
-        priority: m.priority,
-        status: m.status,
-        property: `${m.property.address}, ${m.property.city}, ${m.property.state}`,
-        tenant: m.tenant.tenantProfile.user.name,
-        createdAt: m.createdAt,
-      })),
+      recentMaintenance,
     });
 
   } catch (error: any) {
