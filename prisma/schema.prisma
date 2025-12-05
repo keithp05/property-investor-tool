@@ -61,6 +61,18 @@ model User {
   tenantApplications TenantApplication[]
   featureOverrides UserFeatureOverride[]
 
+  // Google Calendar Integration
+  googleCalendarAccessToken  String?
+  googleCalendarRefreshToken String?
+  googleCalendarEmail        String?
+  googleCalendarConnectedAt  DateTime?
+
+  // Microsoft Calendar Integration
+  microsoftCalendarAccessToken  String?
+  microsoftCalendarRefreshToken String?
+  microsoftCalendarEmail        String?
+  microsoftCalendarConnectedAt  DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
