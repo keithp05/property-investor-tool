@@ -4,7 +4,7 @@ import { verifyAdminSession } from '@/lib/admin-session';
 import bcrypt from 'bcryptjs';
 import { sendPasswordResetEmail, sendWelcomeEmail } from '@/lib/email';
 
-// Version 2 - Simplified delete function
+// Version 3 - Using raw SQL for delete to bypass schema mismatch
 
 /**
  * GET /api/admin/users
@@ -21,136 +21,32 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const includeRelations = searchParams.get('includeRelations') === 'true';
 
     const skip = (page - 1) * limit;
 
-    let users;
-    let total;
+    // Use raw query to avoid schema mismatch issues
+    const users = await prisma.$queryRaw<any[]>`
+      SELECT id, email, name, role, "createdAt", "subscriptionTier", "subscriptionStatus"
+      FROM "User"
+      ORDER BY "createdAt" DESC
+      LIMIT ${limit} OFFSET ${skip}
+    `;
 
-    try {
-      [users, total] = await Promise.all([
-        prisma.user.findMany({
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            createdAt: true,
-            subscriptionTier: true,
-            subscriptionStatus: true,
-            ...(includeRelations && {
-              landlordProfile: {
-                select: {
-                  id: true,
-                  company: true,
-                  _count: {
-                    select: {
-                      properties: true,
-                      tenants: true,
-                    }
-                  }
-                }
-              },
-              tenantProfile: {
-                select: {
-                  id: true,
-                  currentTenancy: {
-                    select: {
-                      id: true,
-                      monthlyRent: true,
-                      property: {
-                        select: {
-                          address: true,
-                          city: true,
-                          state: true,
-                        }
-                      },
-                      landlord: {
-                        select: {
-                          user: {
-                            select: {
-                              name: true,
-                              email: true,
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-            }),
-          },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: limit,
-        }),
-        prisma.user.count(),
-      ]);
-    } catch (e) {
-      console.log('Falling back to simple user query');
-      [users, total] = await Promise.all([
-        prisma.user.findMany({
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            createdAt: true,
-            subscriptionTier: true,
-            subscriptionStatus: true,
-          },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: limit,
-        }),
-        prisma.user.count(),
-      ]);
-    }
+    const totalResult = await prisma.$queryRaw<any[]>`SELECT COUNT(*) as count FROM "User"`;
+    const total = parseInt(totalResult[0].count);
 
-    const transformedUsers = users.map((user: any) => {
-      const transformed: any = {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        createdAt: user.createdAt,
-        subscriptionTier: user.subscriptionTier || 'FREE',
-        subscriptionStatus: user.subscriptionStatus || 'INACTIVE',
-        isActive: true,
-        isSuspended: false,
-        mfaEnabled: false,
-      };
-
-      if (user.landlordProfile) {
-        transformed.landlordProfile = {
-          id: user.landlordProfile.id,
-          company: user.landlordProfile.company,
-          propertyCount: user.landlordProfile._count?.properties || 0,
-          tenantCount: user.landlordProfile._count?.tenants || 0,
-        };
-      }
-
-      if (user.tenantProfile) {
-        transformed.tenantProfile = {
-          id: user.tenantProfile.id,
-          currentTenancy: user.tenantProfile.currentTenancy ? {
-            propertyAddress: [
-              user.tenantProfile.currentTenancy.property?.address,
-              user.tenantProfile.currentTenancy.property?.city,
-              user.tenantProfile.currentTenancy.property?.state
-            ].filter(Boolean).join(', '),
-            landlordName: user.tenantProfile.currentTenancy.landlord?.user?.name || 'Unknown',
-            landlordEmail: user.tenantProfile.currentTenancy.landlord?.user?.email || '',
-            monthlyRent: user.tenantProfile.currentTenancy.monthlyRent ? 
-              parseFloat(user.tenantProfile.currentTenancy.monthlyRent.toString()) : null,
-          } : null,
-        };
-      }
-
-      return transformed;
-    });
+    const transformedUsers = users.map((user: any) => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      createdAt: user.createdAt,
+      subscriptionTier: user.subscriptionTier || 'FREE',
+      subscriptionStatus: user.subscriptionStatus || 'INACTIVE',
+      isActive: true,
+      isSuspended: false,
+      mfaEnabled: false,
+    }));
 
     return NextResponse.json({
       success: true,
@@ -203,11 +99,12 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
+    // Check if user exists
+    const existing = await prisma.$queryRaw<any[]>`
+      SELECT id FROM "User" WHERE email = ${normalizedEmail} LIMIT 1
+    `;
 
-    if (existingUser) {
+    if (existing.length > 0) {
       return NextResponse.json(
         { success: false, error: 'A user with this email already exists' },
         { status: 400 }
@@ -215,22 +112,24 @@ export async function POST(request: NextRequest) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    const userRole = role || 'TENANT';
 
-    const newUser = await prisma.user.create({
-      data: {
-        email: normalizedEmail,
-        name: name || null,
-        password: hashedPassword,
-        role: role || 'TENANT',
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-      },
-    });
+    // Create user with raw SQL
+    const newUsers = await prisma.$queryRaw<any[]>`
+      INSERT INTO "User" (id, email, name, password, role, "createdAt", "updatedAt")
+      VALUES (
+        gen_random_uuid()::text,
+        ${normalizedEmail},
+        ${name || null},
+        ${hashedPassword},
+        ${userRole}::"UserRole",
+        NOW(),
+        NOW()
+      )
+      RETURNING id, email, name, role, "createdAt"
+    `;
+
+    const newUser = newUsers[0];
 
     let emailSent = false;
     if (sendEmail) {
@@ -273,31 +172,34 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true, password: true },
-    });
+    // Get existing user
+    const existingUsers = await prisma.$queryRaw<any[]>`
+      SELECT id, email, name, password FROM "User" WHERE id = ${userId} LIMIT 1
+    `;
 
-    if (!existingUser) {
+    if (existingUsers.length === 0) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    const updateData: any = {};
+    const existingUser = existingUsers[0];
     const changes: string[] = [];
     let newPassword: string | null = null;
 
+    // Build dynamic update
+    const updates: string[] = [];
+    
     if (role) {
-      updateData.role = role;
+      updates.push(`role = '${role}'::"UserRole"`);
       changes.push(`role → ${role}`);
     }
 
     if (subscriptionTier) {
-      updateData.subscriptionTier = subscriptionTier;
+      updates.push(`"subscriptionTier" = '${subscriptionTier}'::"SubscriptionTier"`);
       changes.push(`tier → ${subscriptionTier}`);
     }
 
     if (subscriptionStatus) {
-      updateData.subscriptionStatus = subscriptionStatus;
+      updates.push(`"subscriptionStatus" = '${subscriptionStatus}'::"SubscriptionStatus"`);
       changes.push(`status → ${subscriptionStatus}`);
     }
 
@@ -310,46 +212,26 @@ export async function PATCH(request: NextRequest) {
       newPassword = password;
       
       const hashedPassword = await bcrypt.hash(newPassword, 12);
-      const verifyBeforeSave = await bcrypt.compare(newPassword, hashedPassword);
-      
-      if (!verifyBeforeSave) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Password hashing failed' 
-        }, { status: 500 });
-      }
-      
-      updateData.password = hashedPassword;
+      updates.push(`password = '${hashedPassword}'`);
       changes.push('password reset');
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (updates.length === 0) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        subscriptionTier: true,
-        subscriptionStatus: true,
-        password: true,
-      },
-    });
+    updates.push(`"updatedAt" = NOW()`);
 
-    if (resetPassword && newPassword) {
-      const verifyMatch = await bcrypt.compare(newPassword, updatedUser.password);
-      if (!verifyMatch) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Password reset failed - verification failed after save' 
-        }, { status: 500 });
-      }
-    }
+    // Execute update
+    await prisma.$executeRawUnsafe(`
+      UPDATE "User" SET ${updates.join(', ')} WHERE id = '${userId}'
+    `);
+
+    // Get updated user
+    const updatedUsers = await prisma.$queryRaw<any[]>`
+      SELECT id, email, name, role, "subscriptionTier", "subscriptionStatus"
+      FROM "User" WHERE id = ${userId} LIMIT 1
+    `;
 
     let emailSent = false;
     if (resetPassword && newPassword && sendEmail) {
@@ -361,11 +243,9 @@ export async function PATCH(request: NextRequest) {
       emailSent = result.success;
     }
 
-    const { password: _, ...userWithoutPassword } = updatedUser;
-
     return NextResponse.json({
       success: true,
-      user: userWithoutPassword,
+      user: updatedUsers[0],
       message: changes.join(', '),
       newPassword: newPassword,
       emailSent,
@@ -382,7 +262,7 @@ export async function PATCH(request: NextRequest) {
 
 /**
  * DELETE /api/admin/users
- * Delete a user
+ * Delete a user using raw SQL to bypass schema mismatch
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -407,20 +287,16 @@ export async function DELETE(request: NextRequest) {
 
     console.log('DELETE: Attempting to delete user:', userId);
 
-    // Simple user lookup without relations to avoid query errors
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { 
-        id: true,
-        email: true, 
-        name: true,
-        role: true,
-      },
-    });
+    // Get user info using raw query
+    const users = await prisma.$queryRaw<any[]>`
+      SELECT id, email, name, role FROM "User" WHERE id = ${userId} LIMIT 1
+    `;
 
-    if (!user) {
+    if (users.length === 0) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
+
+    const user = users[0];
 
     // Prevent deleting SUPER_ADMIN
     if (user.role === 'SUPER_ADMIN') {
@@ -432,10 +308,10 @@ export async function DELETE(request: NextRequest) {
 
     console.log('DELETE: Found user to delete:', user.email);
 
-    // Delete in order to handle foreign keys
+    // Delete related records using raw SQL
     // 1. Delete feature overrides
     try {
-      await prisma.userFeatureOverride.deleteMany({ where: { userId } });
+      await prisma.$executeRaw`DELETE FROM "UserFeatureOverride" WHERE "userId" = ${userId}`;
       console.log('DELETE: Deleted feature overrides');
     } catch (e: any) {
       console.log('DELETE: Feature overrides cleanup:', e.message);
@@ -443,7 +319,7 @@ export async function DELETE(request: NextRequest) {
 
     // 2. Delete accounts (OAuth)
     try {
-      await prisma.account.deleteMany({ where: { userId } });
+      await prisma.$executeRaw`DELETE FROM "Account" WHERE "userId" = ${userId}`;
       console.log('DELETE: Deleted accounts');
     } catch (e: any) {
       console.log('DELETE: Accounts cleanup:', e.message);
@@ -451,7 +327,7 @@ export async function DELETE(request: NextRequest) {
 
     // 3. Delete sessions
     try {
-      await prisma.session.deleteMany({ where: { userId } });
+      await prisma.$executeRaw`DELETE FROM "Session" WHERE "userId" = ${userId}`;
       console.log('DELETE: Deleted sessions');
     } catch (e: any) {
       console.log('DELETE: Sessions cleanup:', e.message);
@@ -465,12 +341,40 @@ export async function DELETE(request: NextRequest) {
       console.log('DELETE: Magic links cleanup:', e.message);
     }
 
-    // 5. Finally delete the user
+    // 5. Delete tenant applications
     try {
-      await prisma.user.delete({
-        where: { id: userId },
-      });
-      console.log('DELETE: User deleted successfully:', user.email);
+      await prisma.$executeRaw`DELETE FROM "TenantApplication" WHERE "userId" = ${userId}`;
+      console.log('DELETE: Deleted tenant applications');
+    } catch (e: any) {
+      console.log('DELETE: Tenant applications cleanup:', e.message);
+    }
+
+    // 6. Delete profiles (these cascade to other records)
+    try {
+      await prisma.$executeRaw`DELETE FROM "LandlordProfile" WHERE "userId" = ${userId}`;
+      console.log('DELETE: Deleted landlord profile');
+    } catch (e: any) {
+      console.log('DELETE: Landlord profile cleanup:', e.message);
+    }
+
+    try {
+      await prisma.$executeRaw`DELETE FROM "TenantProfile" WHERE "userId" = ${userId}`;
+      console.log('DELETE: Deleted tenant profile');
+    } catch (e: any) {
+      console.log('DELETE: Tenant profile cleanup:', e.message);
+    }
+
+    try {
+      await prisma.$executeRaw`DELETE FROM "ProProfile" WHERE "userId" = ${userId}`;
+      console.log('DELETE: Deleted pro profile');
+    } catch (e: any) {
+      console.log('DELETE: Pro profile cleanup:', e.message);
+    }
+
+    // 7. Finally delete the user using raw SQL
+    try {
+      const result = await prisma.$executeRaw`DELETE FROM "User" WHERE id = ${userId}`;
+      console.log('DELETE: User deleted successfully:', user.email, 'rows affected:', result);
 
       return NextResponse.json({
         success: true,
@@ -480,7 +384,8 @@ export async function DELETE(request: NextRequest) {
       console.error('DELETE: User delete failed:', deleteError.message);
       console.error('DELETE: Error code:', deleteError.code);
       
-      if (deleteError.code === 'P2003') {
+      // Check for foreign key constraint
+      if (deleteError.message?.includes('foreign key constraint') || deleteError.code === 'P2003') {
         return NextResponse.json({
           success: false,
           error: 'Cannot delete user: they have related records (properties, tenants, etc.). Please remove those first or deactivate the user instead.',
