@@ -224,7 +224,7 @@ export async function PATCH(
 
 /**
  * DELETE /api/admin/users/[userId]
- * Remove all feature overrides for a user (reset to tier defaults)
+ * Delete a user account
  */
 export async function DELETE(
   request: NextRequest,
@@ -238,33 +238,108 @@ export async function DELETE(
     }
 
     const { userId } = await params;
+    
+    // Check for action query param - 'reset-features' just resets overrides
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
 
     // Verify user exists
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true },
+      select: { id: true, email: true, role: true },
     });
 
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // Delete all overrides for this user
-    const result = await prisma.userFeatureOverride.deleteMany({
-      where: { userId }
+    // If action is reset-features, just delete overrides
+    if (action === 'reset-features') {
+      const result = await prisma.userFeatureOverride.deleteMany({
+        where: { userId }
+      });
+
+      console.log(`Removed ${result.count} feature overrides for ${user.email}`);
+
+      return NextResponse.json({
+        success: true,
+        message: `Removed ${result.count} feature overrides for ${user.email}`,
+      });
+    }
+
+    // Prevent deleting SUPER_ADMIN users
+    if (user.role === 'SUPER_ADMIN') {
+      return NextResponse.json(
+        { success: false, error: 'Cannot delete SUPER_ADMIN users' },
+        { status: 403 }
+      );
+    }
+
+    // Delete user and all related data (cascade delete is set up in schema)
+    // First, manually delete related records that might not have cascade
+    
+    // Delete feature overrides
+    try {
+      await prisma.userFeatureOverride.deleteMany({
+        where: { userId }
+      });
+    } catch (e) {
+      console.log('No feature overrides to delete');
+    }
+
+    // Delete accounts (OAuth)
+    try {
+      await prisma.account.deleteMany({
+        where: { userId }
+      });
+    } catch (e) {
+      console.log('No accounts to delete');
+    }
+
+    // Delete sessions
+    try {
+      await prisma.session.deleteMany({
+        where: { userId }
+      });
+    } catch (e) {
+      console.log('No sessions to delete');
+    }
+
+    // Delete magic links
+    try {
+      await (prisma as any).magicLink.deleteMany({
+        where: { email: user.email }
+      });
+    } catch (e) {
+      console.log('No magic links to delete');
+    }
+
+    // Now delete the user
+    await prisma.user.delete({
+      where: { id: userId }
     });
 
-    console.log(`Removed ${result.count} feature overrides for ${user.email}`);
+    console.log(`Deleted user: ${user.email} (${userId})`);
 
     return NextResponse.json({
       success: true,
-      message: `Removed ${result.count} feature overrides for ${user.email}`,
+      message: `User ${user.email} has been deleted`,
     });
 
   } catch (error: any) {
-    console.error('Delete user features error:', error);
+    console.error('Delete user error:', error);
+    
+    // Check for foreign key constraint errors
+    if (error.code === 'P2003') {
+      return NextResponse.json({
+        success: false,
+        error: 'Cannot delete user - they have related data (properties, tenants, etc). Please remove their data first or deactivate instead.',
+        debug: error.message,
+      }, { status: 400 });
+    }
+    
     return NextResponse.json(
-      { success: false, error: 'Failed to reset user features', debug: error.message },
+      { success: false, error: 'Failed to delete user', debug: error.message },
       { status: 500 }
     );
   }

@@ -15,38 +15,6 @@ function generateSecret(): string {
   return secret;
 }
 
-// Generate TOTP code from secret
-function generateTOTP(secret: string, timeStep: number = 30): string {
-  const time = Math.floor(Date.now() / 1000 / timeStep);
-  const timeBuffer = Buffer.alloc(8);
-  timeBuffer.writeBigInt64BE(BigInt(time));
-
-  // Decode base32 secret
-  const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = '';
-  for (const char of secret.toUpperCase()) {
-    const val = base32chars.indexOf(char);
-    if (val === -1) continue;
-    bits += val.toString(2).padStart(5, '0');
-  }
-  const secretBuffer = Buffer.alloc(Math.ceil(bits.length / 8));
-  for (let i = 0; i < secretBuffer.length; i++) {
-    secretBuffer[i] = parseInt(bits.slice(i * 8, (i + 1) * 8).padEnd(8, '0'), 2);
-  }
-
-  const hmac = crypto.createHmac('sha1', secretBuffer);
-  hmac.update(timeBuffer);
-  const hash = hmac.digest();
-
-  const offset = hash[hash.length - 1] & 0xf;
-  const code = ((hash[offset] & 0x7f) << 24 |
-                (hash[offset + 1] & 0xff) << 16 |
-                (hash[offset + 2] & 0xff) << 8 |
-                (hash[offset + 3] & 0xff)) % 1000000;
-
-  return code.toString().padStart(6, '0');
-}
-
 // Verify TOTP code
 function verifyTOTP(secret: string, code: string): boolean {
   // Check current and previous/next time step
@@ -92,32 +60,46 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { 
-        mfaEnabled: true,
-        mfaVerifiedAt: true,
-      },
-    });
+    // Try to get MFA status - columns might not exist
+    try {
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { 
+          mfaEnabled: true,
+          mfaVerifiedAt: true,
+        },
+      });
 
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+      if (!user) {
+        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        mfaEnabled: user.mfaEnabled || false,
+        mfaVerifiedAt: user.mfaVerifiedAt,
+      });
+    } catch (dbError: any) {
+      // Columns don't exist yet
+      if (dbError.message?.includes('does not exist') || dbError.code === 'P2022') {
+        return NextResponse.json({
+          success: true,
+          mfaEnabled: false,
+          mfaVerifiedAt: null,
+          note: 'MFA columns not yet created in database',
+        });
+      }
+      throw dbError;
     }
-
-    return NextResponse.json({
-      success: true,
-      mfaEnabled: user.mfaEnabled || false,
-      mfaVerifiedAt: user.mfaVerifiedAt,
-    });
 
   } catch (error: any) {
     console.error('Get MFA status error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to get MFA status' },
+      { success: false, error: 'Failed to get MFA status', debug: error.message },
       { status: 500 }
     );
   }
@@ -131,24 +113,51 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { action, code } = await request.json();
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { 
-        id: true,
-        email: true,
-        mfaEnabled: true,
-        mfaSecret: true,
-      },
-    });
+    // First check if MFA columns exist by trying a simple query
+    let user: any;
+    let mfaColumnsExist = true;
+    
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { 
+          id: true,
+          email: true,
+          mfaEnabled: true,
+          mfaSecret: true,
+        },
+      });
+    } catch (dbError: any) {
+      if (dbError.message?.includes('does not exist') || dbError.code === 'P2022') {
+        mfaColumnsExist = false;
+        // Get user without MFA columns
+        user = await prisma.user.findUnique({
+          where: { email: session.user.email },
+          select: { 
+            id: true,
+            email: true,
+          },
+        });
+      } else {
+        throw dbError;
+      }
+    }
 
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    if (!mfaColumnsExist) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'MFA is not yet available. Database migration is pending. Please try again in a few minutes.',
+      }, { status: 503 });
     }
 
     if (action === 'setup') {
@@ -206,6 +215,15 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('MFA setup error:', error);
+    
+    // Check for column doesn't exist error
+    if (error.message?.includes('does not exist') || error.code === 'P2022') {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'MFA is not yet available. Database migration is pending. Please try again in a few minutes.',
+      }, { status: 503 });
+    }
+    
     return NextResponse.json(
       { success: false, error: 'Failed to setup MFA', debug: error.message },
       { status: 500 }
@@ -221,7 +239,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -232,7 +250,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { email: session.user.email },
       select: { 
         id: true,
         password: true,
@@ -271,7 +289,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error: any) {
     console.error('Disable MFA error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to disable MFA' },
+      { success: false, error: 'Failed to disable MFA', debug: error.message },
       { status: 500 }
     );
   }
