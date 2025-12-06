@@ -370,6 +370,14 @@ export default function MyPropertiesPage() {
 
                     <div className="flex gap-2 ml-4">
                       <button
+                        onClick={() => window.location.href = `/properties/${property.id}/analyze?address=${encodeURIComponent(property.address)}&city=${encodeURIComponent(property.city)}&state=${encodeURIComponent(property.state)}&zipCode=${encodeURIComponent(property.zipCode)}&price=${property.estimatedValue || property.purchasePrice || 0}`}
+                        className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+                        title="Analyze Investment"
+                      >
+                        <TrendingUp className="h-4 w-4" />
+                        Analyze
+                      </button>
+                      <button
                         onClick={() => window.location.href = `/properties/${property.id}`}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
                         title="View/Edit Property"
