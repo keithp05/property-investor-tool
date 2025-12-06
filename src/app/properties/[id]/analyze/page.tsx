@@ -1390,11 +1390,11 @@ function PropertyAnalysisContent() {
                   <h4 className="font-semibold text-gray-900 mb-3">Regulations & Requirements</h4>
                   <div className="space-y-2">
                     <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm ${
-                      report.shortTermRental.regulations.permitsRequired
+                      report.shortTermRental.regulations?.permitsRequired
                         ? 'bg-yellow-100 text-yellow-800'
                         : 'bg-green-100 text-green-800'
                     }`}>
-                      {report.shortTermRental.regulations.permitsRequired ? (
+                      {report.shortTermRental.regulations?.permitsRequired ? (
                         <>
                           <AlertCircle className="h-4 w-4" />
                           <span>Permits Required</span>
@@ -1406,8 +1406,8 @@ function PropertyAnalysisContent() {
                         </>
                       )}
                     </div>
-                    <p className="text-sm text-gray-700 mt-2"><span className="font-semibold">Max Nights/Year:</span> {report.shortTermRental.regulations.maxNightsPerYear}</p>
-                    <p className="text-sm text-gray-600 italic">{report.shortTermRental.regulations.restrictions}</p>
+                    <p className="text-sm text-gray-700 mt-2"><span className="font-semibold">Max Nights/Year:</span> {report.shortTermRental.regulations?.maxNightsPerYear || 'N/A'}</p>
+                    <p className="text-sm text-gray-600 italic">{report.shortTermRental.regulations?.restrictions || 'No specific restrictions listed'}</p>
                   </div>
                 </div>
               </div>

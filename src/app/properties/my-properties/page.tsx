@@ -1135,8 +1135,9 @@ export default function MyPropertiesPage() {
               <button
                 onClick={() => {
                   setShowAddModal(false);
-                  setSearchAddress('');
                   setFetchedPropertyDetails(null);
+                  setCmaAnalysis(null);
+                  setSection8Data(null);
                   setNewProperty({
                     address: '',
                     city: '',
@@ -1151,6 +1152,7 @@ export default function MyPropertiesPage() {
                     mortgageTerm: '',
                     lenderName: '',
                     loanNumber: '',
+                    status: 'VACANT' as 'VACANT' | 'MAINTENANCE',
                   });
                 }}
                 className="flex-1 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold"
