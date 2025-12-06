@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
@@ -42,7 +42,17 @@ interface CalendarStatus {
   };
 }
 
-export default function SettingsPage() {
+// Loading fallback for Suspense
+function SettingsLoading() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+    </div>
+  );
+}
+
+// Main settings content component
+function SettingsContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -696,5 +706,14 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Export the page with Suspense boundary
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<SettingsLoading />}>
+      <SettingsContent />
+    </Suspense>
   );
 }
