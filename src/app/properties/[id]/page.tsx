@@ -578,7 +578,7 @@ export default function PropertyDetailsPage() {
                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
               >
                 <TrendingUp className="h-5 w-5" />
-                Analyze Property
+                Analyze Investment
               </Link>
               <button onClick={() => setShowApplicationModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                 <FileText className="h-5 w-5" />
