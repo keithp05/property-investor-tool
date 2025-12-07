@@ -50,6 +50,8 @@ export async function GET(
       const purchasePrice = parseFloat(searchParams.get('price') || '0');
       const afterRepairValue = parseFloat(searchParams.get('afterRepairValue') || '0') || purchasePrice * 1.15;
       const estimatedRepairs = parseFloat(searchParams.get('estimatedRepairs') || '0');
+      const reserveCost = parseFloat(searchParams.get('reserveCost') || '5000');
+      const closingCosts = parseFloat(searchParams.get('closingCosts') || '0') || purchasePrice * 0.03;
       
       property = {
         id: propertyId,
@@ -61,6 +63,8 @@ export async function GET(
         purchasePrice: purchasePrice,
         afterRepairValue: afterRepairValue,
         estimatedRepairs: estimatedRepairs,
+        reserveCost: reserveCost,
+        closingCosts: closingCosts,
         // Property Details
         bedrooms: parseInt(searchParams.get('bedrooms') || '3'),
         bathrooms: parseFloat(searchParams.get('bathrooms') || '2'),
@@ -73,7 +77,7 @@ export async function GET(
       };
       
       console.log(`📊 Analyzing ${propertyType} property:`, property.address);
-      console.log(`   Offer: $${purchasePrice.toLocaleString()}, ARV: $${afterRepairValue.toLocaleString()}, Repairs: $${estimatedRepairs.toLocaleString()}`);
+      console.log(`   Offer: $${purchasePrice.toLocaleString()}, ARV: $${afterRepairValue.toLocaleString()}, Repairs: $${estimatedRepairs.toLocaleString()}, Reserve: $${reserveCost.toLocaleString()}`);
     } else {
       // For demo purposes, get property from demo data service
       // In production, this would fetch from database
@@ -90,6 +94,8 @@ export async function GET(
       // Add deal inputs from URL params if provided (for existing properties)
       const afterRepairValue = parseFloat(searchParams.get('afterRepairValue') || '0');
       const estimatedRepairs = parseFloat(searchParams.get('estimatedRepairs') || '0');
+      const reserveCost = parseFloat(searchParams.get('reserveCost') || '5000');
+      const closingCosts = parseFloat(searchParams.get('closingCosts') || '0');
       
       if (afterRepairValue > 0) {
         property.afterRepairValue = afterRepairValue;
@@ -97,12 +103,25 @@ export async function GET(
       if (estimatedRepairs > 0) {
         property.estimatedRepairs = estimatedRepairs;
       }
+      property.reserveCost = reserveCost;
+      if (closingCosts > 0) {
+        property.closingCosts = closingCosts;
+      }
       
       // Override purchase price if provided (user's offer price)
       const offerPrice = parseFloat(searchParams.get('price') || '0');
       if (offerPrice > 0) {
         property.purchasePrice = offerPrice;
       }
+      
+      // Financing options
+      const downPaymentPercent = parseFloat(searchParams.get('downPaymentPercent') || '0');
+      const interestRate = parseFloat(searchParams.get('interestRate') || '0');
+      const loanTermYears = parseInt(searchParams.get('loanTermYears') || '0');
+      
+      if (downPaymentPercent > 0) property.downPaymentPercent = downPaymentPercent;
+      if (interestRate > 0) property.interestRate = interestRate;
+      if (loanTermYears > 0) property.loanTermYears = loanTermYears;
     }
 
     // Generate CMA report with 5-expert AI analysis

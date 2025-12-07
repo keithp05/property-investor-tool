@@ -8,6 +8,8 @@ export interface DealInputs {
   estimatedRepairs: number;
   afterRepairValue: number; // ARV
   estimatedMonthlyRent: number;
+  // Cash reserves
+  reserveCost?: number; // Emergency fund / cash reserves
   // Financing
   downPaymentPercent: number; // e.g., 20 for 20%
   interestRate: number; // e.g., 7.5 for 7.5%
@@ -49,6 +51,7 @@ export interface DealAnalysis {
   cashOnCash: {
     totalCashInvested: number;
     annualCashFlow: number;
+    monthlyCashFlow: number;
     cocReturn: number; // percentage
     rating: 'EXCELLENT' | 'GOOD' | 'MARGINAL' | 'POOR' | 'NEGATIVE';
     explanation: string;
@@ -60,6 +63,7 @@ export interface DealAnalysis {
       netOperatingIncome: number;
       annualDebtService: number;
       cashFlow: number;
+      reserveCost: number;
     };
   };
   
@@ -105,6 +109,7 @@ export function analyzeDeal(inputs: DealInputs): DealAnalysis {
     estimatedRepairs,
     afterRepairValue,
     estimatedMonthlyRent,
+    reserveCost = 0,
     downPaymentPercent,
     interestRate,
     loanTermYears,
@@ -171,9 +176,9 @@ export function analyzeDeal(inputs: DealInputs): DealAnalysis {
   // CASH-ON-CASH RETURN
   // ============================================
   
-  // Calculate total cash invested
+  // Calculate total cash invested (includes reserve fund)
   const downPayment = purchasePrice * (downPaymentPercent / 100);
-  const totalCashInvested = downPayment + closingCosts + estimatedRepairs;
+  const totalCashInvested = downPayment + closingCosts + estimatedRepairs + reserveCost;
   
   // Calculate loan amount and monthly mortgage
   const loanAmount = purchasePrice - downPayment;
@@ -315,6 +320,7 @@ export function analyzeDeal(inputs: DealInputs): DealAnalysis {
     cashOnCash: {
       totalCashInvested: Math.round(totalCashInvested),
       annualCashFlow: Math.round(annualCashFlow),
+      monthlyCashFlow: Math.round(annualCashFlow / 12),
       cocReturn: Math.round(cocReturn * 10) / 10,
       rating: cocRating,
       explanation: cocExplanation,
@@ -326,6 +332,7 @@ export function analyzeDeal(inputs: DealInputs): DealAnalysis {
         netOperatingIncome: Math.round(netOperatingIncome),
         annualDebtService: Math.round(annualDebtService),
         cashFlow: Math.round(annualCashFlow),
+        reserveCost: Math.round(reserveCost),
       },
     },
     overallRating: {
