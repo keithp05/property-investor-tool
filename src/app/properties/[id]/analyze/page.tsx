@@ -2,7 +2,8 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
-import { ArrowLeft, MapPin, Home, TrendingUp, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building, Camera, X, Upload, Plus, Edit3, Play, Calculator } from 'lucide-react';
+import { ArrowLeft, MapPin, Home, TrendingUp, TrendingDown, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building, Play, Calculator, BarChart3 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 interface DealAnalysis {
   seventyPercentRule: {
@@ -93,6 +94,35 @@ interface STRMarketData {
   };
 }
 
+interface HistoricalCrimeData {
+  year: number;
+  violentCrimeRate: number;
+  propertyCrimeRate: number;
+  totalCrimeRate: number;
+}
+
+interface CrimeTrendAnalysis {
+  historicalData: HistoricalCrimeData[];
+  fiveYearChange: number;
+  tenYearChange: number;
+  trend: 'improving' | 'worsening' | 'stable';
+  trendDescription: string;
+  projectedNextYear: number;
+}
+
+interface CrimeScore {
+  overallScore: 'A' | 'B' | 'C' | 'D' | 'F';
+  scoreNumber: number;
+  violentCrimeRate: number;
+  propertyCrimeRate: number;
+  comparison: string;
+  nearbyIncidents: any[];
+  recommendation: string;
+  historicalTrend?: CrimeTrendAnalysis;
+  riskFactors?: string[];
+  safetyFeatures?: string[];
+}
+
 interface CMAReport {
   propertyId: string;
   estimatedValue: number;
@@ -105,15 +135,7 @@ interface CMAReport {
   dealAnalysis: DealAnalysis;
   shortTermRental: STRProjection;
   strMarketData: STRMarketData;
-  crimeScore: {
-    overallScore: 'A' | 'B' | 'C' | 'D' | 'F';
-    scoreNumber: number;
-    violentCrimeRate: number;
-    propertyCrimeRate: number;
-    comparison: string;
-    nearbyIncidents: any[];
-    recommendation: string;
-  };
+  crimeScore: CrimeScore;
   expertAnalyses?: ExpertAnalysis[];
   governmentHousing?: GovernmentHousingAnalysis;
   aiAnalysis: {
@@ -244,6 +266,22 @@ function PropertyAnalysisContent() {
       case 'D+': case 'D': case 'D-': return 'text-orange-600 bg-orange-100';
       case 'F': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getTrendColor = (trend: string) => {
+    switch (trend) {
+      case 'improving': return 'text-green-600';
+      case 'worsening': return 'text-red-600';
+      default: return 'text-gray-600';
+    }
+  };
+
+  const getTrendIcon = (trend: string) => {
+    switch (trend) {
+      case 'improving': return <TrendingDown className="h-5 w-5 text-green-600" />;
+      case 'worsening': return <TrendingUp className="h-5 w-5 text-red-600" />;
+      default: return <BarChart3 className="h-5 w-5 text-gray-600" />;
     }
   };
 
@@ -434,7 +472,7 @@ function PropertyAnalysisContent() {
                   Run Investment Analysis
                 </button>
                 <p className="text-center text-sm text-gray-500 mt-3">
-                  AI will analyze: 70% Rule, 1% Rule, Cash-on-Cash, Section 8, STR potential, and more
+                  AI will analyze: 70% Rule, 1% Rule, Cash-on-Cash, Section 8, STR potential, Crime Trends, and more
                 </p>
               </div>
             </div>
@@ -458,6 +496,7 @@ function PropertyAnalysisContent() {
             <p>✓ Calculating Cash-on-Cash Return</p>
             <p>✓ Analyzing Section 8 Potential</p>
             <p>✓ Evaluating STR Opportunity</p>
+            <p>✓ Fetching Crime Data & Trends</p>
           </div>
         </div>
       </div>
@@ -562,6 +601,15 @@ function PropertyAnalysisContent() {
               <div className={`rounded-lg p-4 border-2 ${getCrimeScoreColor(report.crimeScore?.overallScore || 'C')}`}>
                 <p className="text-sm mb-1">Safety Score</p>
                 <p className="text-2xl font-bold">{report.crimeScore?.overallScore || 'N/A'}</p>
+                {report.crimeScore?.historicalTrend && (
+                  <div className="flex items-center justify-center gap-1 mt-1">
+                    {getTrendIcon(report.crimeScore.historicalTrend.trend)}
+                    <span className={`text-xs ${getTrendColor(report.crimeScore.historicalTrend.trend)}`}>
+                      {report.crimeScore.historicalTrend.trend === 'improving' ? 'Improving' : 
+                       report.crimeScore.historicalTrend.trend === 'worsening' ? 'Worsening' : 'Stable'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -593,6 +641,168 @@ function PropertyAnalysisContent() {
                 </p>
                 <p className="text-xs text-gray-600 mt-2">Higher risk, competitive offer</p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Crime Trend Chart */}
+        {report.crimeScore?.historicalTrend && report.crimeScore.historicalTrend.historicalData.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-3">
+              <Shield className="h-7 w-7 text-blue-600" />
+              Crime Trend Analysis
+            </h2>
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              {/* Trend Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className={`rounded-lg p-4 ${
+                  report.crimeScore.historicalTrend.trend === 'improving' ? 'bg-green-50 border border-green-200' :
+                  report.crimeScore.historicalTrend.trend === 'worsening' ? 'bg-red-50 border border-red-200' :
+                  'bg-gray-50 border border-gray-200'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {getTrendIcon(report.crimeScore.historicalTrend.trend)}
+                    <p className="text-sm font-semibold text-gray-700">Trend Status</p>
+                  </div>
+                  <p className={`text-2xl font-bold capitalize ${getTrendColor(report.crimeScore.historicalTrend.trend)}`}>
+                    {report.crimeScore.historicalTrend.trend}
+                  </p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <p className="text-sm text-gray-600 mb-2">5-Year Change</p>
+                  <p className={`text-2xl font-bold ${report.crimeScore.historicalTrend.fiveYearChange <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {report.crimeScore.historicalTrend.fiveYearChange > 0 ? '+' : ''}{report.crimeScore.historicalTrend.fiveYearChange}%
+                  </p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <p className="text-sm text-gray-600 mb-2">10-Year Change</p>
+                  <p className={`text-2xl font-bold ${report.crimeScore.historicalTrend.tenYearChange <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {report.crimeScore.historicalTrend.tenYearChange > 0 ? '+' : ''}{report.crimeScore.historicalTrend.tenYearChange}%
+                  </p>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+                  <p className="text-sm text-gray-600 mb-2">Projected 2025</p>
+                  <p className="text-2xl font-bold text-indigo-600">
+                    {report.crimeScore.historicalTrend.projectedNextYear}/1K
+                  </p>
+                </div>
+              </div>
+
+              {/* Crime Trend Chart */}
+              <div className="h-80 mt-6">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={report.crimeScore.historicalTrend.historicalData}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="colorViolent" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorProperty" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis 
+                      dataKey="year" 
+                      tick={{ fill: '#6b7280', fontSize: 12 }}
+                      tickLine={{ stroke: '#d1d5db' }}
+                    />
+                    <YAxis 
+                      tick={{ fill: '#6b7280', fontSize: 12 }}
+                      tickLine={{ stroke: '#d1d5db' }}
+                      label={{ value: 'Rate per 1,000', angle: -90, position: 'insideLeft', fill: '#6b7280', fontSize: 12 }}
+                    />
+                    <Tooltip
+                      contentStyle={{ 
+                        backgroundColor: 'white', 
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      }}
+                      formatter={(value: number) => [value.toFixed(1) + '/1K', '']}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="violentCrimeRate"
+                      name="Violent Crime"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorViolent)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="propertyCrimeRate"
+                      name="Property Crime"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorProperty)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="totalCrimeRate"
+                      name="Total Crime"
+                      stroke="#8b5cf6"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#colorTotal)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Trend Description */}
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <p className="text-gray-700">{report.crimeScore.historicalTrend.trendDescription}</p>
+              </div>
+
+              {/* Risk Factors & Safety Features */}
+              {(report.crimeScore.riskFactors?.length > 0 || report.crimeScore.safetyFeatures?.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                  {report.crimeScore.safetyFeatures && report.crimeScore.safetyFeatures.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        Safety Features
+                      </h4>
+                      <ul className="space-y-2">
+                        {report.crimeScore.safetyFeatures.map((feature, i) => (
+                          <li key={i} className="text-sm text-green-700 flex items-start gap-2">
+                            <span className="mt-1">✓</span>
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {report.crimeScore.riskFactors && report.crimeScore.riskFactors.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-orange-600" />
+                        Risk Factors
+                      </h4>
+                      <ul className="space-y-2">
+                        {report.crimeScore.riskFactors.map((risk, i) => (
+                          <li key={i} className="text-sm text-orange-700 flex items-start gap-2">
+                            <span className="mt-1">!</span>
+                            <span>{risk}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -770,11 +980,11 @@ function PropertyAnalysisContent() {
                 <div className="border-t pt-4">
                   <h4 className="font-semibold text-gray-900 mb-2">Local Regulations</h4>
                   <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm ${
-                    report.strMarketData.regulations.permitsRequired
+                    report.strMarketData.regulations?.permitsRequired
                       ? 'bg-yellow-100 text-yellow-800'
                       : 'bg-green-100 text-green-800'
                   }`}>
-                    {report.strMarketData.regulations.permitsRequired ? (
+                    {report.strMarketData.regulations?.permitsRequired ? (
                       <>
                         <AlertCircle className="h-4 w-4" />
                         <span>Permits Required</span>
@@ -786,7 +996,11 @@ function PropertyAnalysisContent() {
                       </>
                     )}
                   </div>
-                  <p className="text-sm text-gray-600 mt-2">{report.strMarketData.regulations.restrictions}</p>
+                  <p className="text-sm text-gray-600 mt-2">
+                    {report.strMarketData.regulations?.maxNightsPerYear !== undefined && 
+                      `Max ${report.strMarketData.regulations.maxNightsPerYear || 'N/A'} nights/year. `}
+                    {report.strMarketData.regulations?.restrictions || 'No specific restrictions listed'}
+                  </p>
                 </div>
               )}
             </div>

@@ -32,6 +32,22 @@ export interface RentalComp {
   rentPerSqft: number;
 }
 
+export interface HistoricalCrimeData {
+  year: number;
+  violentCrimeRate: number;
+  propertyCrimeRate: number;
+  totalCrimeRate: number;
+}
+
+export interface CrimeTrendAnalysis {
+  historicalData: HistoricalCrimeData[];
+  fiveYearChange: number;
+  tenYearChange: number;
+  trend: 'improving' | 'worsening' | 'stable';
+  trendDescription: string;
+  projectedNextYear: number;
+}
+
 export interface CrimeScore {
   overallScore: 'A' | 'B' | 'C' | 'D' | 'F';
   scoreNumber: number;
@@ -44,6 +60,9 @@ export interface CrimeScore {
     distance: number;
   }>;
   recommendation: string;
+  historicalTrend?: CrimeTrendAnalysis;
+  riskFactors?: string[];
+  safetyFeatures?: string[];
 }
 
 export interface ExpertAnalysis {
@@ -214,7 +233,7 @@ class PropertyAnalysisService {
         property.longitude
       );
 
-      // Convert CrimeReport to CrimeScore format for backwards compatibility
+      // Convert CrimeReport to CrimeScore format with historical trend data
       return {
         overallScore: crimeReport.overallScore,
         scoreNumber: crimeReport.scoreNumber,
@@ -229,6 +248,10 @@ class PropertyAnalysisService {
           distance: incident.distance,
         })),
         recommendation: crimeReport.recommendation,
+        // Include historical trend data for the chart
+        historicalTrend: crimeReport.historicalTrend,
+        riskFactors: crimeReport.riskFactors,
+        safetyFeatures: crimeReport.safetyFeatures,
       };
     } catch (error) {
       console.error('Crime data service error, using fallback:', error);
