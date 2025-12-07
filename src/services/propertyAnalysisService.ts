@@ -550,43 +550,100 @@ class PropertyAnalysisService {
 
   /**
    * Generate complete CMA report with real deal analysis
+   * Optimized with timeouts to avoid 504 Gateway Timeout
    */
   async generateCMAReport(property: any): Promise<CMAReport> {
     console.log('🏠 Generating CMA Report with real deal analysis for:', property.address);
 
-    // Get data
-    const [comps, rentalComps, crimeScore] = await Promise.all([
-      this.getSalesComps(property),
-      this.getRentalComps(property),
-      this.getCrimeScore(property),
-    ]);
+    // Helper function to add timeout to promises
+    const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+      return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs))
+      ]);
+    };
 
-    // Calculate values
+    // Quick data that doesn't need external APIs
+    const comps = await this.getSalesComps(property);
+    const rentalComps = await this.getRentalComps(property);
+
+    // Calculate initial values
     const avgCompPrice = comps.reduce((sum, comp) => sum + comp.price, 0) / comps.length;
-    const estimatedValue = Math.round(property.zestimate || property.price || avgCompPrice);
+    const estimatedValue = Math.round(property.zestimate || property.price || avgCompPrice || property.purchasePrice || 250000);
     const avgRent = rentalComps.reduce((sum, comp) => sum + comp.monthlyRent, 0) / rentalComps.length;
 
-    // Get government housing data (real HUD FMR)
-    const governmentHousing = await this.generateGovernmentHousingAnalysis(property, Math.round(avgRent));
+    // Default/fallback values
+    const defaultCrimeScore: CrimeScore = this.getFallbackCrimeScore(property);
+    
+    const defaultGovernmentHousing: GovernmentHousingAnalysis = {
+      section8Eligible: true,
+      estimatedSection8Rent: Math.round(avgRent * 0.95),
+      veteransHousingEligible: true,
+      estimatedVAHUDVASHRent: Math.round(avgRent * 1.0),
+      affordableHousingPrograms: ['Section 8 Housing Choice Voucher', 'HUD-VASH'],
+      estimatedMonthlyIncome: {
+        section8: Math.round(avgRent * 0.95),
+        vaHudvash: Math.round(avgRent * 1.0),
+        total: Math.round(avgRent * 0.95),
+      },
+      annualIncome: Math.round(avgRent * 0.95 * 12),
+      waitlistInfo: 'Section 8 voucher holders available in most markets.',
+      recommendation: 'Property likely qualifies for government housing programs.',
+    };
 
-    // Get STR market data (real or estimated)
-    const [strMarketData, shortTermRental] = await Promise.all([
-      strDataService.getMarketData(
-        property.city || 'Unknown',
-        property.state || 'TX',
-        property.zipCode || '00000',
-        property.propertyType || 'single_family',
-        property.bedrooms || 3
+    const defaultSTRMarketData: STRMarketData = {
+      marketName: `${property.city || 'Unknown'}, ${property.state || 'TX'}`,
+      averageDailyRate: Math.round((property.purchasePrice || estimatedValue) / 1500),
+      occupancyRate: 55,
+      revenuePerAvailableRoom: Math.round(((property.purchasePrice || estimatedValue) / 1500) * 0.55),
+      averageMonthlyRevenue: Math.round(((property.purchasePrice || estimatedValue) / 1500) * 0.55 * 30),
+      seasonality: { high: ['June', 'July', 'December'], low: ['January', 'February'] },
+      regulations: { permitsRequired: false, maxNightsPerYear: 365, restrictions: 'Check local regulations' },
+      competitionLevel: 'Moderate',
+      dataSource: 'estimated',
+      confidence: 50,
+    };
+
+    const defaultSTRProjection: STRPropertyProjection = {
+      estimatedDailyRate: Math.round((property.purchasePrice || estimatedValue) / 1500),
+      estimatedOccupancy: 55,
+      estimatedMonthlyRevenue: Math.round(((property.purchasePrice || estimatedValue) / 1500) * 0.55 * 30 * 0.75),
+      estimatedAnnualRevenue: Math.round(((property.purchasePrice || estimatedValue) / 1500) * 0.55 * 365 * 0.75),
+      setupCosts: { furniture: 3000, photography: 300, supplies: 500, total: 3800 },
+      operatingCosts: { cleaning: 3600, supplies: 600, platformFees: 2000, utilities: 2400, total: 8600 },
+      netOperatingIncome: Math.round(((property.purchasePrice || estimatedValue) / 1500) * 0.55 * 365 * 0.75) - 8600,
+      vsTraditionalRental: 20,
+      recommendation: 'Short-term rental analysis based on market estimates.',
+    };
+
+    // Run external API calls with 8-second timeouts (Amplify has 30s limit)
+    const [crimeScore, governmentHousing, strMarketData, shortTermRental] = await Promise.all([
+      withTimeout(this.getCrimeScore(property), 8000, defaultCrimeScore),
+      withTimeout(this.generateGovernmentHousingAnalysis(property, Math.round(avgRent)), 8000, defaultGovernmentHousing),
+      withTimeout(
+        strDataService.getMarketData(
+          property.city || 'Unknown',
+          property.state || 'TX',
+          property.zipCode || '00000',
+          property.propertyType || 'single_family',
+          property.bedrooms || 3
+        ),
+        8000,
+        defaultSTRMarketData
       ),
-      strDataService.getPropertyProjection(
-        property.city || 'Unknown',
-        property.state || 'TX',
-        property.zipCode || '00000',
-        property.bedrooms || 3,
-        property.bathrooms || 2,
-        property.squareFeet || 1500,
-        property.propertyType || 'single_family',
-        property.amenities || []
+      withTimeout(
+        strDataService.getPropertyProjection(
+          property.city || 'Unknown',
+          property.state || 'TX',
+          property.zipCode || '00000',
+          property.bedrooms || 3,
+          property.bathrooms || 2,
+          property.squareFeet || 1500,
+          property.propertyType || 'single_family',
+          property.amenities || []
+        ),
+        8000,
+        defaultSTRProjection
       ),
     ]);
 

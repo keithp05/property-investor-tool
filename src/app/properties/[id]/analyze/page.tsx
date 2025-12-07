@@ -2,14 +2,51 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
-import { ArrowLeft, MapPin, Home, TrendingUp, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building, Camera, X, Upload, Plus, Edit3 } from 'lucide-react';
+import { ArrowLeft, MapPin, Home, TrendingUp, DollarSign, AlertCircle, CheckCircle, Calendar, Shield, Loader2, Users, Building, Camera, X, Upload, Plus, Edit3, Play, Calculator } from 'lucide-react';
+
+interface DealAnalysis {
+  seventyPercentRule: {
+    maxPurchasePrice: number;
+    percentOfARV: number;
+    passes: boolean;
+    difference: number;
+  };
+  onePercentRule: {
+    rentToPrice: number;
+    passes: boolean;
+    minimumRent: number;
+  };
+  cashOnCash: {
+    cocReturn: number;
+    annualCashFlow: number;
+    monthlyCashFlow: number;
+    totalCashInvested: number;
+  };
+  recommendedOffer: {
+    conservative: number;
+    moderate: number;
+    aggressive: number;
+  };
+  overallRating: {
+    score: number;
+    grade: string;
+    verdict: string;
+    summary: string;
+    passedRules: string[];
+    failedRules: string[];
+  };
+}
 
 interface ExpertAnalysis {
   expertName: string;
+  expertType: string;
   expertise: string;
   rating: number;
   recommendation: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'AVOID' | 'STRONG_AVOID';
   summary: string;
+  recommendedOffer: number;
+  estimatedROI: number;
+  riskAssessment: string;
   pros: string[];
   cons: string[];
   estimatedValue: number;
@@ -33,6 +70,29 @@ interface GovernmentHousingAnalysis {
   recommendation: string;
 }
 
+interface STRProjection {
+  estimatedDailyRate: number;
+  estimatedOccupancy: number;
+  estimatedMonthlyRevenue: number;
+  estimatedAnnualRevenue: number;
+  setupCosts: { furniture: number; photography: number; supplies: number; total: number };
+  operatingCosts: { cleaning: number; supplies: number; platformFees: number; utilities: number; total: number };
+  netOperatingIncome: number;
+  vsTraditionalRental: number;
+  recommendation: string;
+}
+
+interface STRMarketData {
+  marketName: string;
+  averageDailyRate: number;
+  occupancyRate: number;
+  regulations?: {
+    permitsRequired: boolean;
+    maxNightsPerYear: number;
+    restrictions: string;
+  };
+}
+
 interface CMAReport {
   propertyId: string;
   estimatedValue: number;
@@ -42,6 +102,9 @@ interface CMAReport {
   rentalComps: any[];
   estimatedRent: number;
   rentRange: { low: number; high: number };
+  dealAnalysis: DealAnalysis;
+  shortTermRental: STRProjection;
+  strMarketData: STRMarketData;
   crimeScore: {
     overallScore: 'A' | 'B' | 'C' | 'D' | 'F';
     scoreNumber: number;
@@ -67,350 +130,85 @@ function PropertyAnalysisContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [loading, setLoading] = useState(true);
+  
+  // Analysis state
+  const [analysisStarted, setAnalysisStarted] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<CMAReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Cash flow calculator state
-  const [offerPrice, setOfferPrice] = useState(0); // YOUR offer price
+  // Deal Input Form State (BEFORE analysis)
+  const [offerPrice, setOfferPrice] = useState(0);
+  const [afterRepairValue, setAfterRepairValue] = useState(0);
+  const [estimatedRepairs, setEstimatedRepairs] = useState(0);
   const [downPaymentPercent, setDownPaymentPercent] = useState(20);
   const [interestRate, setInterestRate] = useState(7.5);
   const [loanTermYears, setLoanTermYears] = useState(30);
-  const [repairAmount, setRepairAmount] = useState(200);
-  const [repairPeriod, setRepairPeriod] = useState<'monthly' | 'annual' | 'project'>('monthly');
-  const [enableRepairFund, setEnableRepairFund] = useState(false);
-  const [repairFundPercent, setRepairFundPercent] = useState(5);
-  const [propertyTax, setPropertyTax] = useState(0);
-  const [insurance, setInsurance] = useState(150);
-  const [hoa, setHoa] = useState(0);
-  const [includeRemodelInFinancing, setIncludeRemodelInFinancing] = useState(true); // Finance total investment
-
-  // Remodel cost tracking
-  const [remodelCosts, setRemodelCosts] = useState({
-    kitchen: 0,
-    bathrooms: 0,
-    flooring: 0,
-    paint: 0,
-    roofing: 0,
-    hvac: 0,
-    electrical: 0,
-    plumbing: 0,
-    windows: 0,
-    landscaping: 0,
-    other: 0,
-  });
-  const [propertyPhotos, setPropertyPhotos] = useState<string[]>([]);
-  const [uploadingPhotos, setUploadingPhotos] = useState(false);
-
-  // Manual comps upload
-  const [manualComps, setManualComps] = useState<any[]>([]);
-  const [showCompForm, setShowCompForm] = useState(false);
-  const [newComp, setNewComp] = useState({
-    address: '',
-    price: '',
-    bedrooms: '',
-    bathrooms: '',
-    sqft: '',
-    soldDate: '',
-  });
-
-  // Document upload state
-  const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([]);
-  const [uploadingDocument, setUploadingDocument] = useState(false);
-  const [documentUploadStatus, setDocumentUploadStatus] = useState('');
 
   // Extract property details from URL
   const address = searchParams.get('address') || 'Unknown Address';
   const city = searchParams.get('city') || 'Unknown';
-  const state = searchParams.get('state') || 'Unknown';
+  const state = searchParams.get('state') || 'TX';
   const zipCode = searchParams.get('zipCode') || '';
-  const price = searchParams.get('price') || '0';
+  const listingPrice = Number(searchParams.get('price') || '0');
   const propertyType = searchParams.get('type') || 'standard';
+  const bedrooms = searchParams.get('bedrooms') || '3';
+  const bathrooms = searchParams.get('bathrooms') || '2';
+  const squareFeet = searchParams.get('squareFeet') || '1500';
 
+  // Initialize form values from listing price
   useEffect(() => {
-    loadPropertyAnalysis();
-  }, [params.id]);
-
-  // Initialize offer price to listing price
-  useEffect(() => {
-    if (price && offerPrice === 0) {
-      setOfferPrice(Number(price));
+    if (listingPrice > 0 && offerPrice === 0) {
+      setOfferPrice(listingPrice);
+      setAfterRepairValue(Math.round(listingPrice * 1.15)); // Default ARV 15% above listing
     }
-  }, [price]);
+  }, [listingPrice]);
 
-  // Auto-calculate property tax based on offer price
-  useEffect(() => {
-    if (offerPrice > 0) {
-      const estimatedAnnualTax = offerPrice * 0.015; // 1.5% for Texas
-      setPropertyTax(Math.round(estimatedAnnualTax / 12));
+  // Run the AI analysis with user inputs
+  async function runAnalysis() {
+    if (offerPrice <= 0) {
+      setError('Please enter your offer price');
+      return;
     }
-  }, [offerPrice]);
-
-  // Calculate mortgage payment using total investment (offer + remodel)
-  const calculateMortgage = () => {
-    const purchasePrice = offerPrice || Number(price);
-    const totalInvestment = includeRemodelInFinancing 
-      ? purchasePrice + getTotalRemodelCost() 
-      : purchasePrice;
-    const downPayment = totalInvestment * (downPaymentPercent / 100);
-    const loanAmount = totalInvestment - downPayment;
-    const monthlyRate = interestRate / 100 / 12;
-    const numPayments = loanTermYears * 12;
-
-    if (monthlyRate === 0) {
-      return Math.round(loanAmount / numPayments);
-    }
-
-    const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
-    return Math.round(monthlyPayment);
-  };
-
-  // Calculate monthly repair cost based on period
-  const getMonthlyRepairs = () => {
-    if (repairPeriod === 'monthly') {
-      return repairAmount;
-    } else if (repairPeriod === 'annual') {
-      return Math.round(repairAmount / 12);
-    } else {
-      // Project - don't include in monthly cash flow
-      return 0;
-    }
-  };
-
-  // Calculate repair fund reserve
-  const getRepairFundReserve = (monthlyIncome: number) => {
-    if (!enableRepairFund) return 0;
-    return Math.round(monthlyIncome * (repairFundPercent / 100));
-  };
-
-  // Calculate total monthly expenses
-  const calculateMonthlyExpenses = (monthlyIncome: number = 0) => {
-    const mortgage = calculateMortgage();
-    const monthlyRepairs = getMonthlyRepairs();
-    const repairFund = getRepairFundReserve(monthlyIncome);
-
-    return {
-      mortgage,
-      propertyTax,
-      insurance,
-      repairs: monthlyRepairs,
-      repairFund,
-      hoa,
-      total: mortgage + propertyTax + insurance + monthlyRepairs + repairFund + hoa
-    };
-  };
-
-  // Calculate cash flow for different rental strategies
-  const calculateCashFlow = (monthlyIncome: number) => {
-    const expenses = calculateMonthlyExpenses(monthlyIncome);
-    return monthlyIncome - expenses.total;
-  };
-
-  // Calculate total remodel costs
-  const getTotalRemodelCost = () => {
-    return Object.values(remodelCosts).reduce((sum, cost) => sum + cost, 0);
-  };
-
-  // Update remodel cost category
-  const updateRemodelCost = (category: keyof typeof remodelCosts, value: number) => {
-    setRemodelCosts(prev => ({ ...prev, [category]: value }));
-  };
-
-  // Handle photo upload
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    setUploadingPhotos(true);
-    try {
-      const newPhotos: string[] = [];
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const reader = new FileReader();
-
-        await new Promise((resolve) => {
-          reader.onload = (event) => {
-            if (event.target?.result) {
-              newPhotos.push(event.target.result as string);
-            }
-            resolve(null);
-          };
-          reader.readAsDataURL(file);
-        });
-      }
-
-      setPropertyPhotos(prev => [...prev, ...newPhotos]);
-    } catch (error) {
-      console.error('Error uploading photos:', error);
-    } finally {
-      setUploadingPhotos(false);
-    }
-  };
-
-  // Remove photo
-  const removePhoto = (index: number) => {
-    setPropertyPhotos(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // Add manual comp
-  const addManualComp = () => {
-    if (!newComp.address || !newComp.price) {
-      alert('Please enter at least an address and price');
+    if (afterRepairValue <= 0) {
+      setError('Please enter the After Repair Value (ARV)');
       return;
     }
 
-    const comp = {
-      id: Date.now().toString(),
-      address: newComp.address,
-      price: Number(newComp.price),
-      bedrooms: Number(newComp.bedrooms) || 0,
-      bathrooms: Number(newComp.bathrooms) || 0,
-      sqft: Number(newComp.sqft) || 0,
-      soldDate: newComp.soldDate || new Date().toISOString().split('T')[0],
-      source: 'manual',
-    };
-
-    setManualComps(prev => [...prev, comp]);
-    setNewComp({
-      address: '',
-      price: '',
-      bedrooms: '',
-      bathrooms: '',
-      sqft: '',
-      soldDate: '',
-    });
-    setShowCompForm(false);
-  };
-
-  // Remove manual comp
-  const removeManualComp = (id: string) => {
-    setManualComps(prev => prev.filter(comp => comp.id !== id));
-  };
-
-  // Handle document upload (supports multiple files for repair photos)
-  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>, documentType: 'comps' | 'estimate' | 'inspection' | 'repair_photo') => {
-    const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) return;
-
-    // IMPORTANT: Copy FileList to array immediately before any async operations
-    // FileList can become stale/empty during async processing
-    const filesArray: File[] = Array.from(fileList);
-    
-    // Reset the input immediately so user can select same files again if needed
-    e.target.value = '';
-
-    setUploadingDocument(true);
-    const totalFiles = filesArray.length;
-    let processedCount = 0;
-    let successCount = 0;
-
-    console.log(`Starting upload of ${totalFiles} files for ${documentType}`);
+    setAnalysisStarted(true);
+    setLoading(true);
+    setError(null);
 
     try {
-      for (const file of filesArray) {
-        processedCount++;
-        setDocumentUploadStatus(`Processing ${processedCount}/${totalFiles}: ${file.name}...`);
-        console.log(`Processing file ${processedCount}/${totalFiles}: ${file.name}`);
+      // Build query params with user's deal inputs
+      const queryParams = new URLSearchParams({
+        address,
+        city,
+        state,
+        zipCode,
+        price: offerPrice.toString(), // Use offer price, not listing price
+        type: propertyType,
+        bedrooms,
+        bathrooms,
+        squareFeet,
+        // Additional deal inputs
+        afterRepairValue: afterRepairValue.toString(),
+        estimatedRepairs: estimatedRepairs.toString(),
+        downPaymentPercent: downPaymentPercent.toString(),
+        interestRate: interestRate.toString(),
+        loanTermYears: loanTermYears.toString(),
+      });
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('type', documentType);
-        formData.append('propertyId', params.id as string);
-
-        try {
-          const response = await fetch('/api/documents/upload', {
-            method: 'POST',
-            body: formData,
-          });
-
-          const result = await response.json();
-
-          if (result.success) {
-            successCount++;
-            console.log(`Successfully processed: ${file.name}`);
-            setUploadedDocuments(prev => [...prev, result.document]);
-
-            // Auto-populate data based on document type
-            if (documentType === 'comps' && result.extractedData?.comps) {
-              const extractedComps = result.extractedData.comps.map((comp: any) => ({
-                id: Date.now().toString() + Math.random(),
-                address: comp.address,
-                price: comp.price || comp.rentPrice || 0,
-                bedrooms: comp.bedrooms || 0,
-                bathrooms: comp.bathrooms || 0,
-                sqft: comp.sqft || 0,
-                soldDate: comp.soldDate || new Date().toISOString().split('T')[0],
-                source: 'document',
-              }));
-              setManualComps(prev => [...prev, ...extractedComps]);
-            } else if (documentType === 'estimate' && result.extractedData?.lineItems) {
-              setRemodelCosts(prev => {
-                const updated = { ...prev };
-                result.extractedData.lineItems.forEach((item: any) => {
-                  const category = item.category as keyof typeof remodelCosts;
-                  if (category in updated) {
-                    updated[category] += item.cost || 0;
-                  }
-                });
-                return updated;
-              });
-            } else if (documentType === 'repair_photo' && result.extractedData?.estimatedCost) {
-              const avgCost = result.extractedData.estimatedCost.average || 0;
-              const category = result.extractedData.issueType as keyof typeof remodelCosts;
-              if (category && category in remodelCosts) {
-                setRemodelCosts(prev => ({
-                  ...prev,
-                  [category]: (prev[category] || 0) + avgCost
-                }));
-              }
-            }
-          } else {
-            console.error(`Failed to process ${file.name}:`, result.error);
-          }
-        } catch (fileError) {
-          console.error(`Error uploading ${file.name}:`, fileError);
-        }
-      }
-
-      if (successCount === totalFiles) {
-        setDocumentUploadStatus(`✓ Successfully processed ${successCount} file${successCount > 1 ? 's' : ''}`);
-      } else if (successCount > 0) {
-        setDocumentUploadStatus(`Processed ${successCount}/${totalFiles} files successfully`);
-      } else {
-        setDocumentUploadStatus(`Failed to process files`);
-      }
-      setTimeout(() => setDocumentUploadStatus(''), 5000);
-
-    } catch (error) {
-      console.error('Document upload error:', error);
-      setDocumentUploadStatus('Upload failed');
-    } finally {
-      setUploadingDocument(false);
-    }
-  };
-
-  // Remove uploaded document
-  const removeDocument = (id: string) => {
-    setUploadedDocuments(prev => prev.filter(doc => doc.id !== id));
-  };
-
-  async function loadPropertyAnalysis() {
-    try {
-      setLoading(true);
-
-      // Build URL with all query parameters
-      const queryParams = new URLSearchParams(searchParams.toString());
       const response = await fetch(`/api/properties/${params.id}/analyze?${queryParams.toString()}`);
       const data = await response.json();
 
       if (data.success) {
         setReport(data.report);
       } else {
-        setError(data.error);
+        setError(data.error || 'Analysis failed');
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to run analysis');
     } finally {
       setLoading(false);
     }
@@ -438,54 +236,283 @@ function PropertyAnalysisContent() {
     }
   };
 
-  const getRecommendationText = (recommendation: string) => {
-    return recommendation.replace(/_/g, ' ');
+  const getGradeColor = (grade: string) => {
+    switch (grade) {
+      case 'A+': case 'A': case 'A-': return 'text-green-600 bg-green-100';
+      case 'B+': case 'B': case 'B-': return 'text-blue-600 bg-blue-100';
+      case 'C+': case 'C': case 'C-': return 'text-yellow-600 bg-yellow-100';
+      case 'D+': case 'D': case 'D-': return 'text-orange-600 bg-orange-100';
+      case 'F': return 'text-red-600 bg-red-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-16 w-16 text-indigo-600 mx-auto mb-4 animate-spin" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Analyzing Property</h2>
-          <p className="text-gray-600">Running 5-expert AI analysis (3 traditional + 2 short-term rental)...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !report) {
+  // ========== STEP 1: Deal Input Form (Before Analysis) ==========
+  if (!analysisStarted) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-8"
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
           >
             <ArrowLeft className="h-5 w-5" />
             Back
           </button>
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Analysis Failed</h2>
-            <p className="text-gray-600">{error || 'Unable to generate property analysis'}</p>
+
+          {/* Property Info Card */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{address}</h1>
+            <div className="flex items-center gap-2 text-gray-600 mb-4">
+              <MapPin className="h-5 w-5" />
+              <span>{city}, {state} {zipCode}</span>
+            </div>
+            <div className="flex items-center gap-6 text-sm text-gray-600">
+              <span>{bedrooms} bed</span>
+              <span>{bathrooms} bath</span>
+              <span>{Number(squareFeet).toLocaleString()} sqft</span>
+              <span className="font-semibold text-indigo-600">Listed: ${listingPrice.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Deal Input Form */}
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="text-center mb-8">
+              <Calculator className="h-16 w-16 text-indigo-600 mx-auto mb-4" />
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Investment Analysis</h2>
+              <p className="text-gray-600">Enter your deal numbers to get AI-powered investment analysis</p>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+                {error}
+              </div>
+            )}
+
+            {/* Main Deal Inputs */}
+            <div className="space-y-8">
+              {/* Purchase Section */}
+              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-yellow-600" />
+                  Your Offer Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Your Offer Price *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        value={offerPrice || ''}
+                        onChange={(e) => setOfferPrice(Number(e.target.value))}
+                        className="w-full pl-8 pr-4 py-3 text-xl font-bold border-2 border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">What you plan to offer the seller</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      After Repair Value (ARV) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        value={afterRepairValue || ''}
+                        onChange={(e) => setAfterRepairValue(Number(e.target.value))}
+                        className="w-full pl-8 pr-4 py-3 text-xl font-bold border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Property value after repairs/improvements</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Estimated Repairs
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        value={estimatedRepairs || ''}
+                        onChange={(e) => setEstimatedRepairs(Number(e.target.value))}
+                        className="w-full pl-8 pr-4 py-3 text-xl font-bold border-2 border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Cost of repairs/renovations needed</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Stats Preview */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Preview</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Investment</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      ${(offerPrice + estimatedRepairs).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">70% of ARV</p>
+                    <p className="text-xl font-bold text-indigo-600">
+                      ${Math.round(afterRepairValue * 0.7).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Max Purchase (70% Rule)</p>
+                    <p className="text-xl font-bold text-green-600">
+                      ${Math.max(0, Math.round(afterRepairValue * 0.7 - estimatedRepairs)).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Potential Equity</p>
+                    <p className={`text-xl font-bold ${afterRepairValue - offerPrice - estimatedRepairs >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ${(afterRepairValue - offerPrice - estimatedRepairs).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Financing Section */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Building className="h-5 w-5 text-indigo-600" />
+                  Financing Assumptions
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Down Payment %</label>
+                    <input
+                      type="number"
+                      value={downPaymentPercent}
+                      onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      min="0"
+                      max="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Interest Rate %</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={interestRate}
+                      onChange={(e) => setInterestRate(Number(e.target.value))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Loan Term</label>
+                    <select
+                      value={loanTermYears}
+                      onChange={(e) => setLoanTermYears(Number(e.target.value))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="15">15 Years</option>
+                      <option value="20">20 Years</option>
+                      <option value="30">30 Years</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Run Analysis Button */}
+              <div className="pt-6">
+                <button
+                  onClick={runAnalysis}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-4 rounded-xl text-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-3"
+                >
+                  <Play className="h-6 w-6" />
+                  Run Investment Analysis
+                </button>
+                <p className="text-center text-sm text-gray-500 mt-3">
+                  AI will analyze: 70% Rule, 1% Rule, Cash-on-Cash, Section 8, STR potential, and more
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
+  // ========== STEP 2: Loading State ==========
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-16 w-16 text-indigo-600 mx-auto mb-4 animate-spin" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Analyzing Your Deal</h2>
+          <p className="text-gray-600 mb-4">Running 5-expert AI analysis...</p>
+          <div className="text-sm text-gray-500 space-y-1">
+            <p>✓ Checking 70% Rule</p>
+            <p>✓ Checking 1% Rule</p>
+            <p>✓ Calculating Cash-on-Cash Return</p>
+            <p>✓ Analyzing Section 8 Potential</p>
+            <p>✓ Evaluating STR Opportunity</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== STEP 3: Error State ==========
+  if (error || !report) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-4xl mx-auto">
+          <button
+            onClick={() => {
+              setAnalysisStarted(false);
+              setError(null);
+            }}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-8"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Input Form
+          </button>
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Analysis Failed</h2>
+            <p className="text-gray-600 mb-6">{error || 'Unable to generate property analysis'}</p>
+            <button
+              onClick={() => {
+                setAnalysisStarted(false);
+                setError(null);
+              }}
+              className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== STEP 4: Analysis Results ==========
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => router.back()}
+            onClick={() => {
+              setAnalysisStarted(false);
+              setReport(null);
+            }}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
           >
             <ArrowLeft className="h-5 w-5" />
-            Back to {propertyType === 'tax-auction' ? 'Tax Auctions' : 'Search'}
+            Back to Input Form
           </button>
 
           <div className="bg-white rounded-lg shadow-lg p-6">
@@ -496,772 +523,122 @@ function PropertyAnalysisContent() {
                   <MapPin className="h-5 w-5" />
                   <span>{city}, {state} {zipCode}</span>
                 </div>
-                {propertyType === 'tax-auction' && (
-                  <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-semibold">
-                    <DollarSign className="h-4 w-4" />
-                    Tax Auction Property
-                  </div>
-                )}
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-600 mb-1">Purchase Price</p>
-                <p className="text-3xl font-bold text-indigo-600">${Number(price).toLocaleString()}</p>
+                <p className="text-sm text-gray-600 mb-1">Your Offer Price</p>
+                <p className="text-3xl font-bold text-indigo-600">${offerPrice.toLocaleString()}</p>
+                <p className="text-sm text-gray-500">Listed: ${listingPrice.toLocaleString()}</p>
               </div>
             </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600 mb-1">Estimated Value</p>
-                <p className="text-2xl font-bold text-gray-900">${report.estimatedValue?.toLocaleString() || '0'}</p>
+            {/* Deal Grade & Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-6">
+              <div className={`rounded-lg p-4 text-center ${getGradeColor(report.dealAnalysis?.overallRating?.grade || 'C')}`}>
+                <p className="text-sm mb-1">Deal Grade</p>
+                <p className="text-4xl font-bold">{report.dealAnalysis?.overallRating?.grade || 'N/A'}</p>
+                <p className="text-xs mt-1">{report.dealAnalysis?.overallRating?.verdict || ''}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600 mb-1">Est. Monthly Rent</p>
-                <p className="text-2xl font-bold text-gray-900">${report.estimatedRent?.toLocaleString() || '0'}</p>
+                <p className="text-sm text-gray-600 mb-1">70% Rule</p>
+                <p className={`text-2xl font-bold ${report.dealAnalysis?.seventyPercentRule?.passes ? 'text-green-600' : 'text-red-600'}`}>
+                  {report.dealAnalysis?.seventyPercentRule?.passes ? '✓ PASS' : '✗ FAIL'}
+                </p>
+                <p className="text-xs text-gray-500">{report.dealAnalysis?.seventyPercentRule?.percentOfARV?.toFixed(1)}% of ARV</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600 mb-1">Price/Sq Ft</p>
-                <p className="text-2xl font-bold text-gray-900">${report.pricePerSqft.toFixed(0)}</p>
+                <p className="text-sm text-gray-600 mb-1">1% Rule</p>
+                <p className={`text-2xl font-bold ${report.dealAnalysis?.onePercentRule?.passes ? 'text-green-600' : 'text-red-600'}`}>
+                  {report.dealAnalysis?.onePercentRule?.passes ? '✓ PASS' : '✗ FAIL'}
+                </p>
+                <p className="text-xs text-gray-500">{report.dealAnalysis?.onePercentRule?.rentToPrice?.toFixed(2)}% rent/price</p>
               </div>
-              <div className={`rounded-lg p-4 border-2 ${getCrimeScoreColor(report.crimeScore.overallScore)}`}>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">Cash-on-Cash</p>
+                <p className={`text-2xl font-bold ${(report.dealAnalysis?.cashOnCash?.cocReturn || 0) >= 8 ? 'text-green-600' : 'text-orange-600'}`}>
+                  {report.dealAnalysis?.cashOnCash?.cocReturn?.toFixed(1) || '0'}%
+                </p>
+                <p className="text-xs text-gray-500">${report.dealAnalysis?.cashOnCash?.annualCashFlow?.toLocaleString() || '0'}/yr</p>
+              </div>
+              <div className={`rounded-lg p-4 border-2 ${getCrimeScoreColor(report.crimeScore?.overallScore || 'C')}`}>
                 <p className="text-sm mb-1">Safety Score</p>
-                <p className="text-2xl font-bold">{report.crimeScore.overallScore}</p>
+                <p className="text-2xl font-bold">{report.crimeScore?.overallScore || 'N/A'}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Cash Flow Calculator */}
+        {/* Recommended Offers */}
+        {report.dealAnalysis?.recommendedOffer && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Recommended Offer Prices</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6">
+                <p className="text-sm text-green-700 font-semibold mb-1">Conservative</p>
+                <p className="text-3xl font-bold text-green-600">
+                  ${report.dealAnalysis.recommendedOffer.conservative?.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-600 mt-2">Lower risk, higher margin</p>
+              </div>
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+                <p className="text-sm text-blue-700 font-semibold mb-1">Moderate</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  ${report.dealAnalysis.recommendedOffer.moderate?.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-600 mt-2">Balanced risk/reward</p>
+              </div>
+              <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-6">
+                <p className="text-sm text-orange-700 font-semibold mb-1">Aggressive</p>
+                <p className="text-3xl font-bold text-orange-600">
+                  ${report.dealAnalysis.recommendedOffer.aggressive?.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-600 mt-2">Higher risk, competitive offer</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Monthly Cash Flow by Strategy */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-            <DollarSign className="h-7 w-7 text-indigo-600" />
-            Monthly Cash Flow Calculator
-          </h2>
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            {/* Offer Price Section */}
-            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Edit3 className="h-5 w-5 text-yellow-600" />
-                Your Offer Price
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Income Projections by Strategy</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Home className="h-5 w-5 text-blue-600" />
+                Traditional Rental
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Listing Price (Asking)</label>
-                  <div className="text-2xl font-bold text-gray-500">${Number(price).toLocaleString()}</div>
-                  <p className="text-xs text-gray-500 mt-1">Seller's asking price</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Your Offer Price *</label>
-                  <input
-                    type="number"
-                    value={offerPrice}
-                    onChange={(e) => setOfferPrice(Number(e.target.value))}
-                    className="w-full px-4 py-2 text-2xl font-bold border-2 border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white"
-                    placeholder="Enter your offer"
-                  />
-                  <p className="text-xs text-gray-600 mt-1">This will be used for all calculations</p>
-                </div>
-              </div>
+              <p className="text-3xl font-bold text-blue-600">${report.estimatedRent?.toLocaleString()}/mo</p>
+              <p className="text-sm text-gray-600 mt-2">
+                Cash Flow: <span className={`font-bold ${report.dealAnalysis?.cashOnCash?.monthlyCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  ${report.dealAnalysis?.cashOnCash?.monthlyCashFlow?.toLocaleString()}/mo
+                </span>
+              </p>
             </div>
-
-            {/* Manual Comps Section */}
-            <div className="border-t pt-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <Home className="h-5 w-5 text-indigo-600" />
-                  Your Comparable Sales (Comps)
+            {report.governmentHousing && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-green-600" />
+                  Section 8
                 </h3>
-                <button
-                  onClick={() => setShowCompForm(!showCompForm)}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Comp
-                </button>
+                <p className="text-3xl font-bold text-green-600">${report.governmentHousing.estimatedSection8Rent?.toLocaleString()}/mo</p>
+                <p className="text-sm text-gray-600 mt-2">Government guaranteed payment</p>
               </div>
-
-              {/* Comp Form */}
-              {showCompForm && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-4 border-2 border-gray-200">
-                  <h4 className="font-semibold text-gray-900 mb-3">Add New Comparable</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                    <div className="col-span-2">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Address *</label>
-                      <input
-                        type="text"
-                        value={newComp.address}
-                        onChange={(e) => setNewComp({...newComp, address: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="123 Main St, City, ST"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Sold Price *</label>
-                      <input
-                        type="number"
-                        value={newComp.price}
-                        onChange={(e) => setNewComp({...newComp, price: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="250000"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Bedrooms</label>
-                      <input
-                        type="number"
-                        value={newComp.bedrooms}
-                        onChange={(e) => setNewComp({...newComp, bedrooms: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="3"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Bathrooms</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={newComp.bathrooms}
-                        onChange={(e) => setNewComp({...newComp, bathrooms: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Square Feet</label>
-                      <input
-                        type="number"
-                        value={newComp.sqft}
-                        onChange={(e) => setNewComp({...newComp, sqft: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="1500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Sold Date</label>
-                      <input
-                        type="date"
-                        value={newComp.soldDate}
-                        onChange={(e) => setNewComp({...newComp, soldDate: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={addManualComp}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-                    >
-                      Save Comp
-                    </button>
-                    <button
-                      onClick={() => setShowCompForm(false)}
-                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Comp List */}
-              {manualComps.length > 0 && (
-                <div className="space-y-2">
-                  {manualComps.map((comp) => (
-                    <div key={comp.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{comp.address}</p>
-                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                          <span className="font-bold text-green-600">${comp.price.toLocaleString()}</span>
-                          {comp.bedrooms > 0 && <span>{comp.bedrooms} BR</span>}
-                          {comp.bathrooms > 0 && <span>{comp.bathrooms} BA</span>}
-                          {comp.sqft > 0 && <span>{comp.sqft.toLocaleString()} sqft</span>}
-                          {comp.sqft > 0 && comp.price > 0 && <span>${Math.round(comp.price / comp.sqft)}/sqft</span>}
-                          <span className="text-gray-400">Sold: {new Date(comp.soldDate).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeManualComp(comp.id)}
-                        className="ml-4 text-red-500 hover:text-red-700"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
-                  ))}
-                  <div className="bg-blue-50 rounded-lg p-3 mt-4">
-                    <p className="text-sm font-semibold text-gray-700">Average Comp Price: ${Math.round(manualComps.reduce((sum, comp) => sum + comp.price, 0) / manualComps.length).toLocaleString()}</p>
-                    {manualComps.some(c => c.sqft > 0) && (
-                      <p className="text-sm text-gray-600 mt-1">Average Price/Sqft: ${Math.round(manualComps.filter(c => c.sqft > 0).reduce((sum, comp) => sum + (comp.price / comp.sqft), 0) / manualComps.filter(c => c.sqft > 0).length)}/sqft</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {manualComps.length === 0 && !showCompForm && (
-                <div className="text-center py-8 text-gray-500">
-                  <Home className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                  <p>No comps added yet. Add your own comparable sales data.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Document Upload Section */}
-            <div className="border-t pt-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Upload className="h-5 w-5 text-indigo-600" />
-                Upload Documents & Photos
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                {/* Upload Comps Document */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-4 hover:shadow-md transition">
-                  <label className="cursor-pointer block">
-                    <div className="flex flex-col items-center text-center">
-                      <Home className="h-8 w-8 text-blue-600 mb-2" />
-                      <p className="font-semibold text-gray-900 mb-1">Comp Packet</p>
-                      <p className="text-xs text-gray-600 mb-3">PDF with comparable sales</p>
-                      <div className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium">
-                        Choose File
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(e) => handleDocumentUpload(e, 'comps')}
-                      className="hidden"
-                      disabled={uploadingDocument}
-                    />
-                  </label>
-                </div>
-
-                {/* Upload Estimate */}
-                <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-lg p-4 hover:shadow-md transition">
-                  <label className="cursor-pointer block">
-                    <div className="flex flex-col items-center text-center">
-                      <DollarSign className="h-8 w-8 text-green-600 mb-2" />
-                      <p className="font-semibold text-gray-900 mb-1">Contractor Estimate</p>
-                      <p className="text-xs text-gray-600 mb-3">Repair/remodel quote</p>
-                      <div className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm font-medium">
-                        Choose File
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(e) => handleDocumentUpload(e, 'estimate')}
-                      className="hidden"
-                      disabled={uploadingDocument}
-                    />
-                  </label>
-                </div>
-
-                {/* Upload Inspection */}
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-lg p-4 hover:shadow-md transition">
-                  <label className="cursor-pointer block">
-                    <div className="flex flex-col items-center text-center">
-                      <Shield className="h-8 w-8 text-purple-600 mb-2" />
-                      <p className="font-semibold text-gray-900 mb-1">Inspection Report</p>
-                      <p className="text-xs text-gray-600 mb-3">Property inspection</p>
-                      <div className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm font-medium">
-                        Choose File
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(e) => handleDocumentUpload(e, 'inspection')}
-                      className="hidden"
-                      disabled={uploadingDocument}
-                    />
-                  </label>
-                </div>
-
-                {/* Upload Repair Photos */}
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-lg p-4 hover:shadow-md transition">
-                  <label className="cursor-pointer block">
-                    <div className="flex flex-col items-center text-center">
-                      <Camera className="h-8 w-8 text-orange-600 mb-2" />
-                      <p className="font-semibold text-gray-900 mb-1">Repair Photos</p>
-                      <p className="text-xs text-gray-600 mb-3">Photos of damage/repairs</p>
-                      <div className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm font-medium">
-                        Choose Files
-                      </div>
-                    </div>
-                    <input
-                      type="file"
-                      multiple
-                      accept=".jpg,.jpeg,.png"
-                      onChange={(e) => handleDocumentUpload(e, 'repair_photo')}
-                      className="hidden"
-                      disabled={uploadingDocument}
-                    />
-                  </label>
-                </div>
+            )}
+            {report.shortTermRental && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-purple-600" />
+                  Short-Term Rental
+                </h3>
+                <p className="text-3xl font-bold text-purple-600">${report.shortTermRental.estimatedMonthlyRevenue?.toLocaleString()}/mo</p>
+                <p className="text-sm text-gray-600 mt-2">
+                  {report.shortTermRental.estimatedOccupancy}% occupancy @ ${report.shortTermRental.estimatedDailyRate}/night
+                </p>
               </div>
-
-              {/* Upload Status */}
-              {uploadingDocument && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center gap-3">
-                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                  <p className="text-blue-900 font-medium">{documentUploadStatus}</p>
-                </div>
-              )}
-
-              {documentUploadStatus && !uploadingDocument && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <p className="text-green-900 font-medium">{documentUploadStatus}</p>
-                </div>
-              )}
-
-              {/* Uploaded Documents List */}
-              {uploadedDocuments.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-gray-900 mb-2">Uploaded Documents</h4>
-                  {uploadedDocuments.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{doc.fileName}</p>
-                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                          <span className="capitalize">{doc.documentType.replace('_', ' ')}</span>
-                          <span className="text-gray-400">{new Date(doc.uploadedAt).toLocaleDateString()}</span>
-                          <span className="text-gray-400">{(doc.fileSize / 1024).toFixed(1)} KB</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeDocument(doc.id)}
-                        className="ml-4 text-red-500 hover:text-red-700"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Mortgage & Expense Inputs */}
-            <div className="border-t pt-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Financing Details</h3>
-              
-              {/* Include Remodel in Financing Toggle */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={includeRemodelInFinancing}
-                    onChange={(e) => setIncludeRemodelInFinancing(e.target.checked)}
-                    className="w-5 h-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
-                  />
-                  <div>
-                    <span className="text-sm font-semibold text-gray-900">Finance Total Investment (Offer + Remodel)</span>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {includeRemodelInFinancing 
-                        ? `Loan based on ${(offerPrice + getTotalRemodelCost()).toLocaleString()} total investment`
-                        : `Loan based on ${offerPrice.toLocaleString()} offer price only`
-                      }
-                    </p>
-                  </div>
-                </label>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Down Payment %</label>
-                  <input
-                    type="number"
-                    value={downPaymentPercent}
-                    onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    min="0"
-                    max="100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Interest Rate %</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={interestRate}
-                    onChange={(e) => setInterestRate(Number(e.target.value))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Loan Term (Years)</label>
-                  <select
-                    value={loanTermYears}
-                    onChange={(e) => setLoanTermYears(Number(e.target.value))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    <option value="15">15 Years</option>
-                    <option value="20">20 Years</option>
-                    <option value="30">30 Years</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Remodel Cost Tracking Section */}
-            <div className="border-t pt-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">One-Time Remodel Costs</h3>
-                <div className="text-right">
-                  <p className="text-sm text-gray-600">Total Remodel Cost</p>
-                  <p className="text-2xl font-bold text-indigo-600">${getTotalRemodelCost().toLocaleString()}</p>
-                </div>
-              </div>
-
-              {/* Photo Upload */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Property Condition Photos</label>
-                <div className="flex items-center gap-4 mb-4">
-                  <label className="cursor-pointer bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2">
-                    {uploadingPhotos ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="w-5 h-5" />
-                        Upload Photos
-                      </>
-                    )}
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handlePhotoUpload}
-                      className="hidden"
-                      disabled={uploadingPhotos}
-                    />
-                  </label>
-                  <p className="text-sm text-gray-500">{propertyPhotos.length} photo{propertyPhotos.length !== 1 ? 's' : ''} uploaded</p>
-                </div>
-
-                {/* Photo Grid */}
-                {propertyPhotos.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {propertyPhotos.map((photo, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={photo}
-                          alt={`Property ${index + 1}`}
-                          className="w-full h-32 object-cover rounded-lg border-2 border-gray-200"
-                        />
-                        <button
-                          onClick={() => removePhoto(index)}
-                          className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Remodel Cost Categories */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Kitchen</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.kitchen}
-                    onChange={(e) => updateRemodelCost('kitchen', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Bathrooms</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.bathrooms}
-                    onChange={(e) => updateRemodelCost('bathrooms', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Flooring</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.flooring}
-                    onChange={(e) => updateRemodelCost('flooring', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Paint</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.paint}
-                    onChange={(e) => updateRemodelCost('paint', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Roofing</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.roofing}
-                    onChange={(e) => updateRemodelCost('roofing', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">HVAC</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.hvac}
-                    onChange={(e) => updateRemodelCost('hvac', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Electrical</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.electrical}
-                    onChange={(e) => updateRemodelCost('electrical', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Plumbing</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.plumbing}
-                    onChange={(e) => updateRemodelCost('plumbing', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Windows</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.windows}
-                    onChange={(e) => updateRemodelCost('windows', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Landscaping</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.landscaping}
-                    onChange={(e) => updateRemodelCost('landscaping', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Other</label>
-                  <input
-                    type="number"
-                    value={remodelCosts.other}
-                    onChange={(e) => updateRemodelCost('other', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="$0"
-                  />
-                </div>
-              </div>
-
-              {getTotalRemodelCost() > 0 && (
-                <div className="bg-indigo-50 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">Total Investment</p>
-                      <p className="text-lg text-gray-600">${(offerPrice + getTotalRemodelCost()).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">Your Offer Price</p>
-                      <p className="text-lg text-gray-600">${offerPrice.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">Remodel Costs</p>
-                      <p className="text-lg font-bold text-indigo-600">${getTotalRemodelCost().toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Monthly Repair & Expense Section */}
-            <div className="border-t pt-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Repairs & Reserves</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Repair Amount</label>
-                  <input
-                    type="number"
-                    value={repairAmount}
-                    onChange={(e) => setRepairAmount(Number(e.target.value))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Repair Period</label>
-                  <select
-                    value={repairPeriod}
-                    onChange={(e) => setRepairPeriod(e.target.value as 'monthly' | 'annual' | 'project')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    <option value="monthly">Monthly</option>
-                    <option value="annual">Annual</option>
-                    <option value="project">One-Time Project</option>
-                  </select>
-                  {repairPeriod === 'annual' && (
-                    <p className="text-xs text-gray-500 mt-1">${Math.round(repairAmount / 12)}/mo average</p>
-                  )}
-                  {repairPeriod === 'project' && (
-                    <p className="text-xs text-gray-500 mt-1">Not included in monthly cash flow</p>
-                  )}
-                </div>
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={enableRepairFund}
-                      onChange={(e) => setEnableRepairFund(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm font-semibold text-gray-700">Enable Repair Fund Reserve</span>
-                  </label>
-                </div>
-              </div>
-              {enableRepairFund && (
-                <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Repair Fund Reserve (%  of monthly rent)</label>
-                  <input
-                    type="number"
-                    value={repairFundPercent}
-                    onChange={(e) => setRepairFundPercent(Number(e.target.value))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    min="0"
-                    max="20"
-                  />
-                  <p className="text-xs text-gray-600 mt-2">
-                    Recommended: 5-10% for long-term reserves (roof, HVAC, etc.)
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Property Tax/mo</label>
-                <input
-                  type="number"
-                  value={propertyTax}
-                  onChange={(e) => setPropertyTax(Number(e.target.value))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Insurance/mo</label>
-                <input
-                  type="number"
-                  value={insurance}
-                  onChange={(e) => setInsurance(Number(e.target.value))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">HOA/mo</label>
-                <input
-                  type="number"
-                  value={hoa}
-                  onChange={(e) => setHoa(Number(e.target.value))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            {/* Monthly Expenses Breakdown */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <h3 className="font-semibold text-gray-900 mb-3">Monthly Expenses Breakdown</h3>
-              <div className={`grid grid-cols-2 ${enableRepairFund ? 'md:grid-cols-7' : 'md:grid-cols-6'} gap-4`}>
-                <div>
-                  <p className="text-xs text-gray-600">Mortgage (P&I)</p>
-                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses().mortgage.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Property Tax</p>
-                  <p className="text-lg font-bold text-gray-900">${propertyTax.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Insurance</p>
-                  <p className="text-lg font-bold text-gray-900">${insurance.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Repairs {repairPeriod === 'annual' && '(avg)'}</p>
-                  <p className="text-lg font-bold text-gray-900">${calculateMonthlyExpenses().repairs.toLocaleString()}</p>
-                  {repairPeriod === 'project' && (
-                    <p className="text-xs text-gray-500 mt-1">Project: ${repairAmount.toLocaleString()}</p>
-                  )}
-                </div>
-                {enableRepairFund && (
-                  <div>
-                    <p className="text-xs text-gray-600">Repair Fund</p>
-                    <p className="text-lg font-bold text-blue-600">${calculateMonthlyExpenses().repairFund.toLocaleString()}</p>
-                    <p className="text-xs text-gray-500 mt-1">{repairFundPercent}% reserve</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs text-gray-600">HOA</p>
-                  <p className="text-lg font-bold text-gray-900">${hoa.toLocaleString()}</p>
-                </div>
-                <div className="bg-indigo-100 rounded-lg p-2">
-                  <p className="text-xs text-indigo-700 font-semibold">Total Expenses</p>
-                  <p className="text-lg font-bold text-indigo-900">${calculateMonthlyExpenses().total.toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Cash Flow Projections */}
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Monthly Cash Flow by Strategy</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-blue-50 rounded-lg p-4 border-2 border-blue-200">
-                  <p className="text-sm text-gray-600 mb-1">Traditional Rental</p>
-                  <p className="text-xl font-bold text-blue-600">${report.estimatedRent?.toLocaleString() || '0'}/mo</p>
-                  <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.estimatedRent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    Cash Flow: ${calculateCashFlow(report.estimatedRent || 0).toLocaleString()}/mo
-                  </p>
-                </div>
-                {report.governmentHousing && (
-                  <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
-                    <p className="text-sm text-gray-600 mb-1">Section 8</p>
-                    <p className="text-xl font-bold text-green-600">${report.governmentHousing.estimatedSection8Rent?.toLocaleString() || '0'}/mo</p>
-                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.governmentHousing.estimatedSection8Rent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      Cash Flow: ${calculateCashFlow(report.governmentHousing.estimatedSection8Rent || 0).toLocaleString()}/mo
-                    </p>
-                  </div>
-                )}
-                {report.shortTermRental && (
-                  <div className="bg-purple-50 rounded-lg p-4 border-2 border-purple-200">
-                    <p className="text-sm text-gray-600 mb-1">Short-Term Rental</p>
-                    <p className="text-xl font-bold text-purple-600">${report.shortTermRental.estimatedMonthlyRevenue?.toLocaleString() || '0'}/mo</p>
-                    <p className={`text-sm font-semibold mt-2 ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      Cash Flow: ${calculateCashFlow(report.shortTermRental.estimatedMonthlyRevenue || 0).toLocaleString()}/mo
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* 3 Expert Analyses */}
+        {/* Expert Analyses */}
         {report.expertAnalyses && report.expertAnalyses.length > 0 && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
@@ -1269,9 +646,8 @@ function PropertyAnalysisContent() {
               Expert Investment Analyses
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {report.expertAnalyses.map((expert, index) => (
+              {report.expertAnalyses.slice(0, 3).map((expert, index) => (
                 <div key={index} className="bg-white rounded-lg shadow-lg overflow-hidden">
-                  {/* Expert Header */}
                   <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
                     <h3 className="text-xl font-bold mb-1">{expert.expertName}</h3>
                     <p className="text-indigo-100 text-sm mb-3">{expert.expertise}</p>
@@ -1280,9 +656,7 @@ function PropertyAnalysisContent() {
                         <p className="text-sm text-indigo-100">Rating</p>
                         <div className="flex items-center gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
-                            <span key={star} className={star <= expert.rating ? 'text-yellow-400' : 'text-indigo-300'}>
-                              ★
-                            </span>
+                            <span key={star} className={star <= expert.rating ? 'text-yellow-400' : 'text-indigo-300'}>★</span>
                           ))}
                         </div>
                       </div>
@@ -1293,48 +667,43 @@ function PropertyAnalysisContent() {
                     </div>
                   </div>
 
-                  {/* Recommendation Badge */}
                   <div className="p-6">
                     <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 mb-4 ${getRecommendationColor(expert.recommendation)}`}>
                       <TrendingUp className="h-5 w-5" />
-                      <span className="font-bold uppercase text-sm">{getRecommendationText(expert.recommendation)}</span>
+                      <span className="font-bold uppercase text-sm">{expert.recommendation.replace(/_/g, ' ')}</span>
                     </div>
 
-                    {/* Estimated Value */}
                     <div className="mb-4 pb-4 border-b border-gray-200">
-                      <p className="text-sm text-gray-600 mb-1">Estimated Value</p>
-                      <p className="text-2xl font-bold text-gray-900">${expert.estimatedValue?.toLocaleString() || '0'}</p>
+                      <p className="text-sm text-gray-600 mb-1">Recommended Offer</p>
+                      <p className="text-2xl font-bold text-gray-900">${expert.recommendedOffer?.toLocaleString()}</p>
                     </div>
 
-                    {/* Summary */}
-                    <p className="text-gray-700 mb-4 leading-relaxed">{expert.summary}</p>
+                    <p className="text-gray-700 mb-4 leading-relaxed text-sm">{expert.summary}</p>
 
-                    {/* Pros */}
                     <div className="mb-4">
-                      <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
+                      <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2 text-sm">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
                         Strengths
                       </h4>
                       <ul className="space-y-1">
-                        {(expert.pros || []).map((pro, i) => (
-                          <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-                            <span className="text-green-600 mt-1">•</span>
+                        {(expert.pros || []).slice(0, 3).map((pro, i) => (
+                          <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                            <span className="text-green-600 mt-0.5">•</span>
                             <span>{pro}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
 
-                    {/* Cons */}
                     <div>
-                      <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                        <AlertCircle className="h-5 w-5 text-orange-600" />
+                      <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2 text-sm">
+                        <AlertCircle className="h-4 w-4 text-orange-600" />
                         Concerns
                       </h4>
                       <ul className="space-y-1">
-                        {(expert.cons || []).map((con, i) => (
-                          <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-                            <span className="text-orange-600 mt-1">•</span>
+                        {(expert.cons || []).slice(0, 3).map((con, i) => (
+                          <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                            <span className="text-orange-600 mt-0.5">•</span>
                             <span>{con}</span>
                           </li>
                         ))}
@@ -1344,208 +713,177 @@ function PropertyAnalysisContent() {
                 </div>
               ))}
             </div>
+
+            {/* Additional STR Experts */}
+            {report.expertAnalyses.length > 3 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Short-Term Rental Experts</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {report.expertAnalyses.slice(3).map((expert, index) => (
+                    <div key={index} className="bg-white rounded-lg shadow p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{expert.expertName}</h4>
+                          <p className="text-sm text-gray-600">{expert.expertise}</p>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-sm font-bold ${getRecommendationColor(expert.recommendation)}`}>
+                          {expert.recommendation.replace(/_/g, ' ')}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700">{expert.summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Short-Term Rental Analysis */}
+        {/* Short-Term Rental Details */}
         {report.shortTermRental && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-              <Home className="h-7 w-7 text-indigo-600" />
-              Short-Term Rental Analysis (Airbnb / VRBO)
+              <Calendar className="h-7 w-7 text-purple-600" />
+              Short-Term Rental Analysis
             </h2>
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-purple-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Average Nightly Rate</p>
-                  <p className="text-2xl font-bold text-purple-600">${report.shortTermRental.averageNightlyRate}/night</p>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Est. Monthly Revenue (Net)</p>
-                  <p className="text-2xl font-bold text-green-600">${report.shortTermRental.estimatedMonthlyRevenue?.toLocaleString() || '0'}/mo</p>
-                  {report.shortTermRental.vsTraditionalRental !== undefined && (
-                    <p className={`text-xs mt-1 font-semibold ${report.shortTermRental.vsTraditionalRental >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {report.shortTermRental.vsTraditionalRental >= 0 ? '+' : ''}{report.shortTermRental.vsTraditionalRental}% vs traditional
-                    </p>
-                  )}
+                  <p className="text-sm text-gray-600">Daily Rate</p>
+                  <p className="text-2xl font-bold text-purple-600">${report.shortTermRental.estimatedDailyRate}</p>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Expected Occupancy</p>
-                  <p className="text-2xl font-bold text-blue-600">{report.shortTermRental.occupancyRate}%</p>
+                  <p className="text-sm text-gray-600">Occupancy</p>
+                  <p className="text-2xl font-bold text-blue-600">{report.shortTermRental.estimatedOccupancy}%</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Monthly Net</p>
+                  <p className="text-2xl font-bold text-green-600">${report.shortTermRental.estimatedMonthlyRevenue?.toLocaleString()}</p>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Annual Net</p>
+                  <p className="text-2xl font-bold text-indigo-600">${report.shortTermRental.estimatedAnnualRevenue?.toLocaleString()}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">Market Info</h4>
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-700"><span className="font-semibold">Platform:</span> {report.shortTermRental.platform}</p>
-                    <p className="text-sm text-gray-700"><span className="font-semibold">Seasonal Demand:</span> {report.shortTermRental.seasonalDemand}</p>
-                    <p className="text-sm text-gray-700"><span className="font-semibold">Competition:</span> {report.shortTermRental.competitionLevel}</p>
-                    <p className="text-sm text-gray-700"><span className="font-semibold">Annual Revenue:</span> ${report.shortTermRental.projectedAnnualRevenue?.toLocaleString() || '0'}</p>
+              {report.strMarketData?.regulations && (
+                <div className="border-t pt-4">
+                  <h4 className="font-semibold text-gray-900 mb-2">Local Regulations</h4>
+                  <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm ${
+                    report.strMarketData.regulations.permitsRequired
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-green-100 text-green-800'
+                  }`}>
+                    {report.strMarketData.regulations.permitsRequired ? (
+                      <>
+                        <AlertCircle className="h-4 w-4" />
+                        <span>Permits Required</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        <span>No Permits Required</span>
+                      </>
+                    )}
                   </div>
+                  <p className="text-sm text-gray-600 mt-2">{report.strMarketData.regulations.restrictions}</p>
                 </div>
-
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">Regulations & Requirements</h4>
-                  <div className="space-y-2">
-                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm ${
-                      report.shortTermRental.regulations?.permitsRequired
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {report.shortTermRental.regulations?.permitsRequired ? (
-                        <>
-                          <AlertCircle className="h-4 w-4" />
-                          <span>Permits Required</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="h-4 w-4" />
-                          <span>No Permits Required</span>
-                        </>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-700 mt-2"><span className="font-semibold">Max Nights/Year:</span> {report.shortTermRental.regulations?.maxNightsPerYear || 'N/A'}</p>
-                    <p className="text-sm text-gray-600 italic">{report.shortTermRental.regulations?.restrictions || 'No specific restrictions listed'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-purple-50 rounded-lg p-4 border-2 border-purple-200">
-                <h4 className="font-semibold text-purple-900 mb-2">Recommendation</h4>
-                <p className="text-purple-800 text-sm">{report.shortTermRental.recommendation}</p>
-              </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Government Housing Analysis */}
+        {/* Government Housing */}
         {report.governmentHousing && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-              <Building className="h-7 w-7 text-indigo-600" />
+              <Building className="h-7 w-7 text-green-600" />
               Government Housing Programs
             </h2>
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Section 8 Fair Market Rent</p>
-                  <p className="text-2xl font-bold text-blue-600">${report.governmentHousing.estimatedSection8Rent?.toLocaleString() || '0'}/mo</p>
-                  <p className="text-xs text-gray-500 mt-1">${((report.governmentHousing.estimatedSection8Rent || 0) * 12).toLocaleString()}/year</p>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-green-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Potential Monthly Income</p>
-                  <p className="text-2xl font-bold text-green-600">${report.governmentHousing.estimatedMonthlyIncome?.total?.toLocaleString() || '0'}/mo</p>
-                  <p className="text-xs text-gray-500 mt-1">Annual: ${report.governmentHousing.annualIncome?.toLocaleString() || '0'}</p>
+                  <p className="text-sm text-gray-600">Section 8 FMR</p>
+                  <p className="text-2xl font-bold text-green-600">${report.governmentHousing.estimatedSection8Rent?.toLocaleString()}/mo</p>
                 </div>
                 <div className="bg-purple-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">VA-HUD VASH Rent</p>
-                  <p className="text-2xl font-bold text-purple-600">${report.governmentHousing.estimatedVAHUDVASHRent?.toLocaleString() || '0'}/mo</p>
-                  <p className="text-xs text-gray-500 mt-1">Veterans housing program</p>
+                  <p className="text-sm text-gray-600">VA-HUD VASH</p>
+                  <p className="text-2xl font-bold text-purple-600">${report.governmentHousing.estimatedVAHUDVASHRent?.toLocaleString()}/mo</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Annual Income</p>
+                  <p className="text-2xl font-bold text-blue-600">${report.governmentHousing.annualIncome?.toLocaleString()}</p>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">Section 8 Eligibility</h4>
-                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${
-                    report.governmentHousing.section8Eligible
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {report.governmentHousing.section8Eligible ? (
-                      <CheckCircle className="h-5 w-5" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5" />
-                    )}
-                    <span className="font-semibold">
-                      {report.governmentHousing.section8Eligible ? 'Eligible' : 'Not Eligible'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-3">{report.governmentHousing.waitlistInfo}</p>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">Affordable Housing Programs</h4>
-                  <ul className="space-y-2">
-                    {report.governmentHousing.affordableHousingPrograms.map((program, i) => (
-                      <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-                        <Shield className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <span>{program}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="bg-indigo-50 rounded-lg p-4">
-                <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
-                <p className="text-sm text-gray-700">{report.governmentHousing.recommendation}</p>
-              </div>
+              <p className="text-sm text-gray-700">{report.governmentHousing.recommendation}</p>
             </div>
           </div>
         )}
 
-        {/* AI Synthesis */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
+        {/* AI Summary */}
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
             <TrendingUp className="h-7 w-7 text-indigo-600" />
-            AI Investment Analysis
+            AI Investment Summary
           </h2>
+          
+          <div className="mb-6">
+            <h3 className="font-semibold text-gray-900 mb-2">Deal Summary</h3>
+            <p className="text-gray-700">{report.dealAnalysis?.overallRating?.summary}</p>
+          </div>
 
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Market Summary</h3>
-              <p className="text-gray-700 leading-relaxed">{report.aiAnalysis.marketSummary}</p>
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                Rules Passed
+              </h3>
+              <ul className="space-y-2">
+                {(report.dealAnalysis?.overallRating?.passedRules || []).map((rule, i) => (
+                  <li key={i} className="text-sm text-green-700 flex items-start gap-2">
+                    <span className="mt-1">✓</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Investment Potential</h3>
-              <p className="text-gray-700 leading-relaxed">{report.aiAnalysis.investmentPotential}</p>
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-orange-600" />
+                Rules Failed
+              </h3>
+              <ul className="space-y-2">
+                {(report.dealAnalysis?.overallRating?.failedRules || []).map((rule, i) => (
+                  <li key={i} className="text-sm text-orange-700 flex items-start gap-2">
+                    <span className="mt-1">✗</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  Key Strengths
-                </h3>
-                <ul className="space-y-2">
-                  {(report.aiAnalysis.strengths || []).map((strength, i) => (
-                    <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-                      <span className="text-green-600 mt-1">✓</span>
-                      <span>{strength}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-orange-600" />
-                  Key Concerns
-                </h3>
-                <ul className="space-y-2">
-                  {(report.aiAnalysis.concerns || []).map((concern, i) => (
-                    <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-                      <span className="text-orange-600 mt-1">⚠</span>
-                      <span>{concern}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div className="bg-indigo-50 rounded-lg p-6 border-2 border-indigo-200">
-              <h3 className="font-semibold text-indigo-900 mb-2">Final Recommendation</h3>
-              <p className="text-indigo-800">{report.aiAnalysis.recommendation}</p>
-            </div>
+          <div className="bg-indigo-50 rounded-lg p-6 border-2 border-indigo-200">
+            <h3 className="font-semibold text-indigo-900 mb-2">Final Recommendation</h3>
+            <p className="text-indigo-800">{report.aiAnalysis?.recommendation}</p>
           </div>
         </div>
 
+        {/* Re-analyze Button */}
+        <div className="text-center mb-8">
+          <button
+            onClick={() => {
+              setAnalysisStarted(false);
+              setReport(null);
+            }}
+            className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition"
+          >
+            ← Adjust Numbers & Re-analyze
+          </button>
+        </div>
+
         {/* Footer */}
-        <div className="mt-8 text-center text-sm text-gray-500">
+        <div className="text-center text-sm text-gray-500">
           <p>Analysis generated on {new Date(report.generatedAt).toLocaleString()}</p>
         </div>
       </div>
