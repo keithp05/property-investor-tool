@@ -192,6 +192,9 @@ export default function PropertySearchPage() {
         state: property.state || '',
         zipCode: property.zipCode || '',
         price: (property.currentValue || property.estimatedValue || property.purchasePrice || 0).toString(),
+        bedrooms: (property.bedrooms || 3).toString(),
+        bathrooms: (property.bathrooms || 2).toString(),
+        squareFeet: (property.squareFeet || 1500).toString(),
         type: property.source || 'zillow'
       });
       router.push(`/properties/${propertyId}/analyze?${queryParams.toString()}`);
@@ -346,9 +349,11 @@ export default function PropertySearchPage() {
                           yearBuilt: data.property.yearBuilt,
                           propertyType: data.property.propertyType || 'SINGLE_FAMILY',
                           currentValue: data.property.estimatedValue || data.property.zestimate,
+                          purchasePrice: data.property.estimatedValue || data.property.zestimate,
                           monthlyRent: data.property.rentZestimate,
                           marketRent: data.property.marketRent,
                           estimatedValue: data.property.estimatedValue || data.property.zestimate,
+                          source: 'zillow', // Mark as external source
                           status: 'AVAILABLE',
                           createdAt: new Date(),
                           updatedAt: new Date(),
