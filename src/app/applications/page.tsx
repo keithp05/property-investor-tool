@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Loader2, CheckCircle, Clock, XCircle, Eye, Home, DollarSign, Briefcase, Mail, Phone, MessageSquare, Calendar, AlertCircle, Send, X } from 'lucide-react';
+import { FileText, Loader2, CheckCircle, Clock, XCircle, Eye, Home, DollarSign, Briefcase, Mail, Phone, MessageSquare, Calendar, AlertCircle, Send, X, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface Application {
@@ -315,6 +315,32 @@ export default function ApplicationsPage() {
     setActionModal({ isOpen: true, application, actionType });
   };
 
+  const handleDelete = async (applicationId: string) => {
+    if (!confirm('Are you sure you want to delete this application? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/applications/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applicationId }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await fetchApplications();
+        alert('Application deleted successfully');
+      } else {
+        alert(result.error || 'Failed to delete application');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete application');
+    }
+  };
+
   const filteredApplications = applications.filter((app) => {
     if (filter === 'all') return true;
     return app.status === filter;
@@ -461,6 +487,7 @@ export default function ApplicationsPage() {
                       <button onClick={() => openActionModal(app, 'schedule_call')} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm"><Calendar className="h-4 w-4" />Schedule Call</button>
                     )}
                     <Link href={`/applications/${app.id}`} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm"><Eye className="h-4 w-4" />Details</Link>
+                    <button onClick={() => handleDelete(app.id)} className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 flex items-center gap-2 text-sm"><Trash2 className="h-4 w-4" />Delete</button>
                   </div>
                 </div>
               </div>
