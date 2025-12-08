@@ -8,15 +8,16 @@ import Stripe from 'stripe';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { link: string } }
+  { params }: { params: Promise<{ link: string }> }
 ) {
   try {
-    const { link } = params;
+    const { link } = await params;
 
     // Initialize Stripe inside the function to avoid build-time errors
     if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('❌ STRIPE_SECRET_KEY not configured');
       return NextResponse.json(
-        { error: 'Stripe not configured' },
+        { success: false, error: 'Stripe not configured' },
         { status: 500 }
       );
     }
@@ -24,6 +25,8 @@ export async function POST(
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2024-12-18.acacia',
     });
+
+    console.log(`💳 Creating payment intent for application link: ${link}`);
 
     // Verify application exists
     const application = await prisma.tenantApplication.findUnique({
@@ -40,16 +43,18 @@ export async function POST(
     });
 
     if (!application) {
+      console.error(`❌ Application not found for link: ${link}`);
       return NextResponse.json(
-        { error: 'Application not found' },
+        { success: false, error: 'Application not found' },
         { status: 404 }
       );
     }
 
     // Check if already paid
     if (application.applicationFeePaid) {
+      console.log(`⚠️ Application ${application.id} already paid`);
       return NextResponse.json(
-        { error: 'Application fee already paid' },
+        { success: false, error: 'Application fee already paid' },
         { status: 400 }
       );
     }
@@ -78,9 +83,10 @@ export async function POST(
     });
 
   } catch (error: any) {
-    console.error('Create payment intent error:', error);
+    console.error('❌ Create payment intent error:', error);
     return NextResponse.json(
       {
+        success: false,
         error: 'Failed to create payment intent',
         details: error.message,
       },
