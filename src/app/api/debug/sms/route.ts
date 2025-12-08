@@ -28,39 +28,29 @@ export async function GET(request: NextRequest) {
         : '❌ not set',
       TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || '❌ not set',
       
-      // AWS SNS (fallback)
+      // AWS SNS
       SNS_ACCESS_KEY_ID: process.env.SNS_ACCESS_KEY_ID 
-        ? `${process.env.SNS_ACCESS_KEY_ID.substring(0, 4)}...`
-        : (process.env.AWS_ACCESS_KEY_ID 
-          ? `AWS_* fallback: ${process.env.AWS_ACCESS_KEY_ID.substring(0, 4)}...`
-          : '❌ not set'),
+        ? `✅ ${process.env.SNS_ACCESS_KEY_ID.substring(0, 8)}...`
+        : '❌ not set',
       SNS_SECRET_ACCESS_KEY: process.env.SNS_SECRET_ACCESS_KEY 
         ? '✅ set (hidden)'
-        : (process.env.AWS_SECRET_ACCESS_KEY 
-          ? '✅ AWS_* fallback (hidden)'
-          : '❌ not set'),
-      SNS_REGION: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1 (default)',
+        : '❌ not set',
+      SNS_REGION: process.env.SNS_REGION || 'us-east-1 (default)',
     };
 
     return NextResponse.json({
       success: true,
       message: 'SMS configuration check',
-      status,
+      activeProvider: status.provider,
+      isConfigured: status.isConfigured,
+      providerDetails: status.details,
       environmentVariables: envCheck,
-      instructions: {
-        twilio: {
-          description: 'Recommended - Easy to set up',
-          signUp: 'https://www.twilio.com/',
-          cost: '~$0.0075/SMS for US numbers',
-          requiredEnvVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'],
-        },
-        aws_sns: {
-          description: 'Alternative - More complex setup',
-          signUp: 'https://aws.amazon.com/sns/',
-          cost: '~$0.00645/SMS',
-          requiredEnvVars: ['SNS_ACCESS_KEY_ID', 'SNS_SECRET_ACCESS_KEY', 'SNS_REGION'],
-          note: 'Use SNS_* prefix, not AWS_* (Amplify blocks AWS_* vars)',
-        },
+      troubleshooting: {
+        step1: 'Check IAM user has SNS:Publish permission',
+        step2: 'Check SMS spending limit in AWS SNS console (default $1)',
+        step3: 'In sandbox mode, verify destination phone numbers first',
+        step4: 'US numbers dont support custom SenderIDs',
+        awsConsole: 'https://console.aws.amazon.com/sns/v3/home?region=us-east-1#/mobile/text-messaging',
       },
     });
   } catch (error: any) {
@@ -101,32 +91,51 @@ export async function POST(request: NextRequest) {
         error: 'SMS not configured',
         details: status.details,
         provider: status.provider,
-        instructions: 'Set TWILIO_* or SNS_* environment variables in Amplify',
       }, { status: 400 });
     }
 
-    const testMessage = message || 'This is a test SMS from RentalIQ. If you received this, SMS is working! 🎉';
+    const testMessage = message || `Test SMS from RentalIQ at ${new Date().toLocaleTimeString()}. If you received this, SMS is working!`;
 
-    console.log(`📱 Sending test SMS to: ${phoneNumber} via ${status.provider}`);
+    console.log(`📱 === SENDING TEST SMS ===`);
+    console.log(`📱 To: ${phoneNumber}`);
+    console.log(`📱 Provider: ${status.provider}`);
+    console.log(`📱 Message: ${testMessage}`);
     
     const result = await sendSMS(phoneNumber, testMessage);
 
-    console.log(`📱 SMS result:`, result);
+    console.log(`📱 === SMS RESULT ===`);
+    console.log(`📱 Success: ${result.success}`);
+    console.log(`📱 MessageId: ${result.messageId || 'N/A'}`);
+    console.log(`📱 Error: ${result.error || 'None'}`);
 
-    return NextResponse.json({
-      success: result.success,
-      messageId: result.messageId,
-      error: result.error,
-      provider: result.provider,
-      phoneNumber,
-      messageSent: testMessage,
-    });
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        messageId: result.messageId,
+        provider: result.provider,
+        phoneNumber,
+        message: 'SMS sent successfully! Check your phone.',
+      });
+    } else {
+      return NextResponse.json({
+        success: false,
+        error: result.error,
+        provider: result.provider,
+        phoneNumber,
+        troubleshooting: {
+          iamPolicy: 'Ensure IAM user has: {"Effect": "Allow", "Action": "sns:Publish", "Resource": "*"}',
+          spendingLimit: 'Check AWS SNS Text Messaging > Spending limit (default $1/month)',
+          sandbox: 'In sandbox, add phone number to "Sandbox destination phone numbers"',
+          region: 'Ensure SNS_REGION matches where you set up SMS',
+        },
+      }, { status: 400 });
+    }
   } catch (error: any) {
-    console.error('❌ Test SMS error:', error);
+    console.error('❌ Test SMS exception:', error);
     return NextResponse.json({
       success: false,
       error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      stack: error.stack?.split('\n').slice(0, 5),
     }, { status: 500 });
   }
 }

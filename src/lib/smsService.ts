@@ -132,8 +132,17 @@ function getSNSClient(): SNSClient {
 async function sendViaSNS(phoneNumber: string, message: string): Promise<SMSResult> {
   const accessKey = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
   const secretKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  const region = process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1';
+  
+  console.log('📱 SNS Config Check:', {
+    hasAccessKey: !!accessKey,
+    accessKeyPrefix: accessKey?.substring(0, 8),
+    hasSecretKey: !!secretKey,
+    region,
+  });
   
   if (!accessKey || !secretKey) {
+    console.error('❌ SNS credentials missing');
     return {
       success: false,
       error: 'AWS SNS credentials not configured',
@@ -142,16 +151,21 @@ async function sendViaSNS(phoneNumber: string, message: string): Promise<SMSResu
 
   try {
     const formattedPhone = formatPhoneNumber(phoneNumber);
-    const client = getSNSClient();
+    console.log(`📱 Sending SMS to: ${formattedPhone}`);
+    
+    // Create a fresh client with explicit credentials
+    const client = new SNSClient({
+      region,
+      credentials: {
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+      },
+    });
     
     const params: PublishCommandInput = {
       Message: message,
       PhoneNumber: formattedPhone,
       MessageAttributes: {
-        'AWS.SNS.SMS.SenderID': {
-          DataType: 'String',
-          StringValue: 'RentalIQ',
-        },
         'AWS.SNS.SMS.SMSType': {
           DataType: 'String',
           StringValue: 'Transactional',
@@ -159,20 +173,42 @@ async function sendViaSNS(phoneNumber: string, message: string): Promise<SMSResu
       },
     };
 
+    console.log('📱 SNS Publish params:', { ...params, Message: params.Message?.substring(0, 50) + '...' });
+
     const command = new PublishCommand(params);
     const response = await client.send(command);
 
-    console.log(`📱 SMS sent via SNS to ${formattedPhone}:`, response.MessageId);
+    console.log(`✅ SMS sent via SNS to ${formattedPhone}:`, response.MessageId);
 
     return {
       success: true,
       messageId: response.MessageId,
     };
   } catch (error: any) {
-    console.error('SNS send error:', error);
+    console.error('❌ SNS send error:', {
+      name: error.name,
+      message: error.message,
+      code: error.Code || error.code,
+      statusCode: error.$metadata?.httpStatusCode,
+      requestId: error.$metadata?.requestId,
+    });
+    
+    // Provide helpful error messages
+    let userMessage = error.message || 'Failed to send SMS via SNS';
+    
+    if (error.name === 'InvalidParameterValue' || error.message?.includes('Invalid parameter')) {
+      userMessage = 'Invalid phone number format. Use E.164 format (+1XXXXXXXXXX)';
+    } else if (error.name === 'AuthorizationError' || error.message?.includes('not authorized')) {
+      userMessage = 'IAM user lacks SNS:Publish permission. Check IAM policy.';
+    } else if (error.message?.includes('endpoint') || error.message?.includes('sandbox')) {
+      userMessage = 'SMS is in sandbox mode. Verify phone number in AWS SNS console or request production access.';
+    } else if (error.message?.includes('spending')) {
+      userMessage = 'SMS spending limit reached. Increase limit in AWS SNS console.';
+    }
+    
     return {
       success: false,
-      error: error.message || 'Failed to send SMS via SNS',
+      error: userMessage,
     };
   }
 }
