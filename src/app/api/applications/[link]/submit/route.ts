@@ -15,6 +15,7 @@ export async function POST(
     const data = await request.json();
 
     console.log('📝 Submitting application for link:', link);
+    console.log('📦 Received data keys:', Object.keys(data));
 
     // Verify application exists and is pending
     const application = await prisma.tenantApplication.findUnique({
@@ -28,13 +29,9 @@ export async function POST(
           },
         },
         landlord: {
-          include: {
-            user: {
-              select: {
-                email: true,
-                name: true,
-              },
-            },
+          select: {
+            email: true,
+            name: true,
           },
         },
       },
@@ -56,86 +53,85 @@ export async function POST(
       );
     }
 
-    // Parse the full name into first and last
-    const nameParts = (data.fullName || '').trim().split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    // Prepare update data - only include fields that exist in schema
+    const updateData: any = {
+      // Primary Applicant Info - schema uses fullName, not firstName/lastName
+      fullName: data.fullName || null,
+      email: data.email || null,
+      phone: data.phone || null,
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+      ssn: data.ssn || null,
+
+      // Current Employment
+      employerName: data.employerName || null,
+      employerPhone: data.employerPhone || null,
+      jobTitle: data.jobTitle || null,
+      monthlyIncome: data.monthlyIncome ? parseFloat(data.monthlyIncome) : null,
+      employmentStartDate: data.employmentStartDate ? new Date(data.employmentStartDate) : null,
+
+      // Previous Employment
+      previousEmployerName: data.previousEmployerName || null,
+      previousEmployerPhone: data.previousEmployerPhone || null,
+      previousJobTitle: data.previousJobTitle || null,
+      previousEmploymentStartDate: data.previousEmploymentStartDate ? new Date(data.previousEmploymentStartDate) : null,
+      previousEmploymentEndDate: data.previousEmploymentEndDate ? new Date(data.previousEmploymentEndDate) : null,
+
+      // References
+      reference1Name: data.reference1Name || null,
+      reference1Phone: data.reference1Phone || null,
+      reference1Relationship: data.reference1Relationship || null,
+      reference2Name: data.reference2Name || null,
+      reference2Phone: data.reference2Phone || null,
+      reference2Relationship: data.reference2Relationship || null,
+
+      // Current Address
+      currentAddress: data.currentAddress || null,
+      currentCity: data.currentCity || null,
+      currentState: data.currentState || null,
+      currentZip: data.currentZip || null,
+      currentLandlord: data.currentLandlord || null,
+      currentLandlordPhone: data.currentLandlordPhone || null,
+      currentMonthlyRent: data.currentMonthlyRent ? parseFloat(data.currentMonthlyRent) : null,
+      currentMoveInDate: data.currentMoveInDate ? new Date(data.currentMoveInDate) : null,
+
+      // Previous Address
+      previousAddress: data.previousAddress || null,
+      previousCity: data.previousCity || null,
+      previousState: data.previousState || null,
+      previousZip: data.previousZip || null,
+      previousLandlord: data.previousLandlord || null,
+      previousLandlordPhone: data.previousLandlordPhone || null,
+
+      // Pets - petDetails is Json type in schema
+      hasPets: data.hasPets || false,
+      petDetails: data.petDetails || null,
+
+      // Additional Occupants - Json type in schema
+      additionalOccupants: data.additionalOccupants || null,
+
+      // Second Applicant - secondApplicantInfo is Json type in schema
+      hasSecondApplicant: data.hasSecondApplicant || false,
+      secondApplicantInfo: data.secondApplicantInfo ? { info: data.secondApplicantInfo } : null,
+
+      // Documents
+      payStubsUrls: data.payStubsUrls || [],
+      idDocumentUrl: data.idDocumentUrl || null,
+
+      // Payment tracking
+      applicationFeePaid: data.applicationFeePaid || false,
+      stripePaymentIntentId: data.stripePaymentIntentId || null,
+
+      // Update status
+      status: 'SUBMITTED',
+      submittedAt: new Date(),
+    };
+
+    console.log('📝 Updating application with status: SUBMITTED');
 
     // Update application with submitted data
     const updatedApplication = await prisma.tenantApplication.update({
       where: { applicationLink: link },
-      data: {
-        // Primary Applicant Info
-        firstName,
-        lastName,
-        email: data.email,
-        phone: data.phone,
-        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
-        ssn: data.ssn, // TODO: Encrypt this
-
-        // Current Employment
-        employerName: data.employerName,
-        employerPhone: data.employerPhone,
-        jobTitle: data.jobTitle,
-        monthlyIncome: data.monthlyIncome ? parseFloat(data.monthlyIncome) : null,
-        employmentStartDate: data.employmentStartDate ? new Date(data.employmentStartDate) : null,
-
-        // Previous Employment (if less than 2 years)
-        previousEmployerName: data.previousEmployerName || null,
-        previousEmployerPhone: data.previousEmployerPhone || null,
-        previousJobTitle: data.previousJobTitle || null,
-        previousEmploymentStartDate: data.previousEmploymentStartDate ? new Date(data.previousEmploymentStartDate) : null,
-        previousEmploymentEndDate: data.previousEmploymentEndDate ? new Date(data.previousEmploymentEndDate) : null,
-
-        // References
-        reference1Name: data.reference1Name || null,
-        reference1Phone: data.reference1Phone || null,
-        reference1Relationship: data.reference1Relationship || null,
-        reference2Name: data.reference2Name || null,
-        reference2Phone: data.reference2Phone || null,
-        reference2Relationship: data.reference2Relationship || null,
-
-        // Current Address
-        currentAddress: data.currentAddress || null,
-        currentCity: data.currentCity || null,
-        currentState: data.currentState || null,
-        currentZip: data.currentZip || null,
-        currentLandlord: data.currentLandlord || null,
-        currentLandlordPhone: data.currentLandlordPhone || null,
-        currentMonthlyRent: data.currentMonthlyRent ? parseFloat(data.currentMonthlyRent) : null,
-        currentMoveInDate: data.currentMoveInDate ? new Date(data.currentMoveInDate) : null,
-
-        // Previous Address (if less than 2 years at current)
-        previousAddress: data.previousAddress || null,
-        previousCity: data.previousCity || null,
-        previousState: data.previousState || null,
-        previousZip: data.previousZip || null,
-        previousLandlord: data.previousLandlord || null,
-        previousLandlordPhone: data.previousLandlordPhone || null,
-
-        // Pets
-        hasPets: data.hasPets || false,
-        petDetails: data.petDetails ? JSON.stringify(data.petDetails) : null,
-
-        // Additional Occupants
-        additionalOccupants: data.additionalOccupants ? JSON.stringify(data.additionalOccupants) : null,
-
-        // Second Applicant
-        hasSecondApplicant: data.hasSecondApplicant || false,
-        secondApplicantInfo: data.secondApplicantInfo || null,
-
-        // Documents (URLs from upload)
-        payStubsUrls: data.payStubsUrls || [],
-        idDocumentUrl: data.idDocumentUrl || null,
-
-        // Payment tracking
-        applicationFeePaid: data.applicationFeePaid || false,
-        stripePaymentIntentId: data.stripePaymentIntentId || null,
-
-        // Update status
-        status: 'SUBMITTED',
-        submittedAt: new Date(),
-      },
+      data: updateData,
     });
 
     console.log(`✅ Application submitted: ${updatedApplication.id}`);
@@ -161,7 +157,6 @@ export async function POST(
         }
       } catch (smsError) {
         console.error('SMS notification error:', smsError);
-        // Don't fail the request if SMS fails
       }
     }
 
@@ -173,6 +168,8 @@ export async function POST(
 
   } catch (error: any) {
     console.error('❌ Submit application error:', error);
+    console.error('❌ Error details:', error.message);
+    console.error('❌ Error stack:', error.stack);
     return NextResponse.json(
       {
         success: false,
