@@ -1,24 +1,191 @@
 /**
- * AWS SNS Service for Text Messaging
+ * SMS Service - Supports Twilio (recommended) and AWS SNS
  * Handles SMS notifications for tenant applications, reminders, etc.
  */
 
 import { SNSClient, PublishCommand, PublishCommandInput } from '@aws-sdk/client-sns';
 
-// Initialize SNS client
-// Uses SNS_* prefix for Amplify compatibility (Amplify blocks AWS_* prefix)
-const snsClient = new SNSClient({
-  region: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
-  },
-});
+// ============================================================================
+// CONFIGURATION CHECK
+// ============================================================================
+
+interface SMSConfig {
+  provider: 'twilio' | 'sns' | 'none';
+  isConfigured: boolean;
+  details: string;
+}
+
+function getSMSConfig(): SMSConfig {
+  // Check Twilio first (recommended)
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+  
+  if (twilioSid && twilioToken && twilioPhone) {
+    return {
+      provider: 'twilio',
+      isConfigured: true,
+      details: `Twilio configured with phone: ${twilioPhone}`,
+    };
+  }
+  
+  // Check AWS SNS (fallback)
+  const snsAccessKey = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+  const snsSecretKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  
+  if (snsAccessKey && snsSecretKey) {
+    return {
+      provider: 'sns',
+      isConfigured: true,
+      details: `AWS SNS configured in region: ${process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1'}`,
+    };
+  }
+  
+  return {
+    provider: 'none',
+    isConfigured: false,
+    details: 'No SMS provider configured. Set TWILIO_* or SNS_* environment variables.',
+  };
+}
+
+// ============================================================================
+// TWILIO IMPLEMENTATION
+// ============================================================================
+
+async function sendViaTwilio(phoneNumber: string, message: string): Promise<SMSResult> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromPhone = process.env.TWILIO_PHONE_NUMBER;
+  
+  if (!accountSid || !authToken || !fromPhone) {
+    return {
+      success: false,
+      error: 'Twilio credentials not configured',
+    };
+  }
+  
+  try {
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    
+    // Twilio REST API call
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+    const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        To: formattedPhone,
+        From: fromPhone,
+        Body: message,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('Twilio error response:', data);
+      return {
+        success: false,
+        error: data.message || `Twilio error: ${response.status}`,
+      };
+    }
+    
+    console.log(`📱 SMS sent via Twilio to ${formattedPhone}:`, data.sid);
+    
+    return {
+      success: true,
+      messageId: data.sid,
+    };
+  } catch (error: any) {
+    console.error('Twilio send error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to send SMS via Twilio',
+    };
+  }
+}
+
+// ============================================================================
+// AWS SNS IMPLEMENTATION
+// ============================================================================
+
+// Initialize SNS client lazily
+let snsClient: SNSClient | null = null;
+
+function getSNSClient(): SNSClient {
+  if (!snsClient) {
+    snsClient = new SNSClient({
+      region: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
+      },
+    });
+  }
+  return snsClient;
+}
+
+async function sendViaSNS(phoneNumber: string, message: string): Promise<SMSResult> {
+  const accessKey = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+  const secretKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  
+  if (!accessKey || !secretKey) {
+    return {
+      success: false,
+      error: 'AWS SNS credentials not configured',
+    };
+  }
+
+  try {
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    const client = getSNSClient();
+    
+    const params: PublishCommandInput = {
+      Message: message,
+      PhoneNumber: formattedPhone,
+      MessageAttributes: {
+        'AWS.SNS.SMS.SenderID': {
+          DataType: 'String',
+          StringValue: 'RentalIQ',
+        },
+        'AWS.SNS.SMS.SMSType': {
+          DataType: 'String',
+          StringValue: 'Transactional',
+        },
+      },
+    };
+
+    const command = new PublishCommand(params);
+    const response = await client.send(command);
+
+    console.log(`📱 SMS sent via SNS to ${formattedPhone}:`, response.MessageId);
+
+    return {
+      success: true,
+      messageId: response.MessageId,
+    };
+  } catch (error: any) {
+    console.error('SNS send error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to send SMS via SNS',
+    };
+  }
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
 
 export interface SMSResult {
   success: boolean;
   messageId?: string;
   error?: string;
+  provider?: string;
 }
 
 /**
@@ -47,61 +214,53 @@ function formatPhoneNumber(phone: string): string {
   return `+1${cleaned}`;
 }
 
+// ============================================================================
+// MAIN SEND FUNCTION
+// ============================================================================
+
 /**
- * Send an SMS message via AWS SNS
+ * Send an SMS message via configured provider (Twilio or AWS SNS)
  */
 export async function sendSMS(
   phoneNumber: string,
-  message: string,
-  senderId?: string
+  message: string
 ): Promise<SMSResult> {
-  // Check if AWS credentials are configured (supports both AWS_* and SNS_* prefixes)
-  const accessKey = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-  const secretKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  const config = getSMSConfig();
   
-  if (!accessKey || !secretKey) {
-    console.error('AWS credentials not configured for SMS');
+  console.log(`📱 SMS Config: ${config.provider} - ${config.details}`);
+  
+  if (!config.isConfigured) {
+    console.error('❌ SMS not configured:', config.details);
     return {
       success: false,
-      error: 'SMS service not configured. Please set AWS credentials.',
+      error: config.details,
+      provider: 'none',
     };
   }
-
-  try {
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    
-    const params: PublishCommandInput = {
-      Message: message,
-      PhoneNumber: formattedPhone,
-      MessageAttributes: {
-        'AWS.SNS.SMS.SenderID': {
-          DataType: 'String',
-          StringValue: senderId || 'RentalIQ',
-        },
-        'AWS.SNS.SMS.SMSType': {
-          DataType: 'String',
-          StringValue: 'Transactional', // Higher delivery priority
-        },
-      },
-    };
-
-    const command = new PublishCommand(params);
-    const response = await snsClient.send(command);
-
-    console.log(`SMS sent successfully to ${formattedPhone}:`, response.MessageId);
-
-    return {
-      success: true,
-      messageId: response.MessageId,
-    };
-  } catch (error: any) {
-    console.error('SMS send error:', error);
-    return {
-      success: false,
-      error: error.message || 'Failed to send SMS',
-    };
+  
+  let result: SMSResult;
+  
+  if (config.provider === 'twilio') {
+    result = await sendViaTwilio(phoneNumber, message);
+    result.provider = 'twilio';
+  } else {
+    result = await sendViaSNS(phoneNumber, message);
+    result.provider = 'sns';
   }
+  
+  return result;
 }
+
+/**
+ * Get current SMS configuration status
+ */
+export function getSMSStatus(): SMSConfig {
+  return getSMSConfig();
+}
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
 
 /**
  * Send application received notification
@@ -112,7 +271,6 @@ export async function sendApplicationReceivedSMS(
   propertyAddress: string
 ): Promise<SMSResult> {
   const message = `Hi ${applicantName}, your rental application for ${propertyAddress} has been received. We'll review it and get back to you within 2-3 business days. - RentalIQ`;
-  
   return sendSMS(phoneNumber, message);
 }
 
@@ -158,7 +316,6 @@ export async function sendRentReminderSMS(
   propertyAddress?: string
 ): Promise<SMSResult> {
   const message = `Hi ${tenantName}, friendly reminder: Your rent payment of $${amount.toLocaleString()} is due on ${dueDate}. Pay online at RentalIQ to avoid late fees. - RentalIQ`;
-  
   return sendSMS(phoneNumber, message);
 }
 
@@ -172,7 +329,6 @@ export async function sendRentOverdueSMS(
   daysOverdue: number
 ): Promise<SMSResult> {
   const message = `Hi ${tenantName}, your rent payment of $${amount.toLocaleString()} is ${daysOverdue} day(s) overdue. Please pay immediately to avoid additional late fees. - RentalIQ`;
-  
   return sendSMS(phoneNumber, message);
 }
 
@@ -217,7 +373,6 @@ export async function sendLeaseExpirationSMS(
   daysRemaining: number
 ): Promise<SMSResult> {
   const message = `Hi ${tenantName}, your lease expires on ${expirationDate} (${daysRemaining} days). Please contact your landlord to discuss renewal options. - RentalIQ`;
-  
   return sendSMS(phoneNumber, message);
 }
 
@@ -228,16 +383,15 @@ export async function sendCustomSMS(
   phoneNumber: string,
   message: string
 ): Promise<SMSResult> {
-  // Ensure message ends with branding
   const brandedMessage = message.includes('RentalIQ') 
     ? message 
     : `${message} - RentalIQ`;
-  
   return sendSMS(phoneNumber, brandedMessage);
 }
 
 export const smsService = {
   sendSMS,
+  getSMSStatus,
   sendApplicationReceivedSMS,
   sendApplicationStatusSMS,
   sendRentReminderSMS,
