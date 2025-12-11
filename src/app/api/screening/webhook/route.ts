@@ -1,102 +1,113 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/notifications';
+import { sendSMS } from '@/lib/smsService';
+import { parseWebhookPayload, mapCertnStatusToAppStatus } from '@/lib/certnService';
 
 /**
  * POST /api/screening/webhook
- * Webhook endpoint for receiving screening results from providers
+ * Receive webhook callbacks from Certn when screening is complete
  * 
- * Supports:
- * - TransUnion SmartMove
- * - Checkr
- * - Custom/internal updates
+ * Configure this webhook URL in your Certn dashboard:
+ * https://your-domain.com/api/screening/webhook
  */
 export async function POST(request: NextRequest) {
   try {
+    // Get raw body for potential signature verification
     const body = await request.json();
     
-    console.log('📥 Screening webhook received:', JSON.stringify(body, null, 2));
+    console.log('📋 Certn webhook received:', JSON.stringify(body, null, 2));
 
-    // Verify webhook authenticity (add your provider's verification here)
-    // const signature = request.headers.get('x-webhook-signature');
-    // if (!verifySignature(body, signature)) {
-    //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-    // }
-
-    const { 
-      screeningId, 
-      applicationId,
-      type, // 'BACKGROUND' | 'CREDIT' | 'BOTH'
-      status, // 'COMPLETED' | 'FAILED' | 'REQUIRES_ACTION'
-      creditScore,
-      creditReportUrl,
-      backgroundCheckStatus, // 'CLEAR' | 'REVIEW' | 'ADVERSE'
-      backgroundCheckReportUrl,
-      summary,
-    } = body;
-
-    // Find application by screeningId or applicationId
-    let application;
-    if (applicationId) {
-      application = await prisma.tenantApplication.findUnique({
-        where: { id: applicationId },
-        include: { property: true },
-      });
-    } else if (screeningId) {
-      application = await prisma.tenantApplication.findFirst({
-        where: { 
-          OR: [
-            { backgroundCheckId: screeningId },
-            { creditCheckId: screeningId },
-          ]
-        },
-        include: { property: true },
-      });
+    // Parse the webhook payload
+    const parsed = parseWebhookPayload(body);
+    
+    if (!parsed) {
+      console.error('❌ Failed to parse Certn webhook payload');
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
+
+    const { applicantId, status, result, reportStatus } = parsed;
+    
+    console.log('📋 Parsed webhook:', { applicantId, status, result, reportStatus });
+
+    // Find the application by Certn applicant/application ID
+    const application = await prisma.tenantApplication.findFirst({
+      where: {
+        OR: [
+          { backgroundCheckId: applicantId },
+          { creditCheckId: applicantId },
+        ],
+      },
+      include: {
+        property: true,
+        landlord: {
+          select: {
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
 
     if (!application) {
-      console.error('❌ Application not found for screening webhook');
-      return NextResponse.json({ error: 'Application not found' }, { status: 404 });
+      console.warn(`⚠️ No application found for Certn ID: ${applicantId}`);
+      // Return 200 to acknowledge receipt even if we can't find the application
+      return NextResponse.json({ 
+        received: true, 
+        warning: 'Application not found',
+      });
     }
 
-    // Prepare update data
-    const updateData: any = {};
+    // Map Certn status to our status
+    const appStatus = mapCertnStatusToAppStatus(reportStatus, result);
+    
+    // Extract data from webhook
+    const creditScore = body.equifax_result?.credit_score 
+      || body.credit_score 
+      || null;
+    
+    const reportUrl = body.report_url 
+      || body.softcheck_result?.report_url 
+      || body.us_criminal_record_check_result?.report_url
+      || null;
 
-    if (type === 'CREDIT' || type === 'BOTH') {
-      if (creditScore) updateData.creditScore = creditScore;
-      if (creditReportUrl) updateData.creditReportUrl = creditReportUrl;
-    }
-
-    if (type === 'BACKGROUND' || type === 'BOTH') {
-      if (backgroundCheckStatus) updateData.backgroundCheckStatus = backgroundCheckStatus;
-      if (backgroundCheckReportUrl) updateData.backgroundCheckReportUrl = backgroundCheckReportUrl;
-    }
-
-    // Update application
+    // Update the application
     await prisma.tenantApplication.update({
       where: { id: application.id },
-      data: updateData,
+      data: {
+        backgroundCheckStatus: appStatus,
+        creditScore: creditScore,
+        backgroundCheckReportUrl: reportUrl,
+        creditReportUrl: reportUrl,
+      },
     });
 
-    // Send notification to landlord
-    const landlord = await prisma.user.findUnique({
-      where: { id: application.landlordId },
-      select: { email: true, name: true },
+    console.log(`✅ Updated application ${application.id} with Certn results:`, {
+      status: appStatus,
+      creditScore,
+      hasReportUrl: !!reportUrl,
     });
 
-    if (landlord?.email) {
-      const statusEmoji = backgroundCheckStatus === 'CLEAR' ? '✅' : 
-                          backgroundCheckStatus === 'REVIEW' ? '⚠️' : '❌';
-      
+    // Notify landlord of results
+    if (application.landlord?.email) {
+      const statusText = appStatus === 'CLEARED' 
+        ? '✅ Cleared - No issues found'
+        : appStatus === 'REVIEW_NEEDED'
+        ? '⚠️ Review Needed - Some items require attention'
+        : appStatus === 'FAILED'
+        ? '❌ Issues Found - Review recommended'
+        : `Status: ${appStatus}`;
+
       await sendEmail({
-        to: landlord.email,
-        subject: `${statusEmoji} Screening Results Ready - ${application.fullName}`,
-        body: `Hi ${landlord.name || 'Landlord'},
+        to: application.landlord.email,
+        subject: `Background Check Complete - ${application.fullName || 'Applicant'} | RentalIQ`,
+        body: `Hi ${application.landlord.name || 'Landlord'},
 
-The screening results for ${application.fullName}'s application at ${application.property.address} are ready.
+The background check for ${application.fullName || 'the applicant'} is complete.
 
-Credit Score: ${creditScore || 'N/A'}
-Background Check: ${backgroundCheckStatus || 'N/A'}
+Property: ${application.property.address}
+Result: ${statusText}
+${creditScore ? `Credit Score: ${creditScore}` : ''}
 
 Log in to RentalIQ to view the full report.
 
@@ -109,37 +120,32 @@ RentalIQ`,
   <style>
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background-color: ${backgroundCheckStatus === 'CLEAR' ? '#10B981' : backgroundCheckStatus === 'REVIEW' ? '#F59E0B' : '#EF4444'}; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .header { background-color: #4F46E5; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
     .content { background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .result-box { background-color: white; padding: 20px; border-radius: 8px; margin: 15px 0; }
-    .score { font-size: 48px; font-weight: bold; color: #4F46E5; }
-    .button { display: inline-block; padding: 12px 24px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 6px; margin-top: 20px; }
+    .info-box { background-color: #EEF2FF; border-left: 4px solid #4F46E5; padding: 15px; margin: 20px 0; }
+    .status-cleared { background-color: #D1FAE5; border-left-color: #10B981; }
+    .status-review { background-color: #FEF3C7; border-left-color: #F59E0B; }
+    .status-failed { background-color: #FEE2E2; border-left-color: #EF4444; }
+    .btn { display: inline-block; padding: 12px 24px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 6px; margin-top: 20px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>${statusEmoji} Screening Complete</h1>
+      <h1>🔍 Background Check Complete</h1>
     </div>
     <div class="content">
-      <p>Hi ${landlord.name || 'Landlord'},</p>
-      <p>The screening results for <strong>${application.fullName}</strong>'s application are ready.</p>
+      <p>Hi ${application.landlord.name || 'Landlord'},</p>
+      <p>The background check for <strong>${application.fullName || 'the applicant'}</strong> is complete.</p>
       
-      <div class="result-box">
-        <h3>📊 Credit Score</h3>
-        <div class="score">${creditScore || 'N/A'}</div>
+      <div class="info-box ${appStatus === 'CLEARED' ? 'status-cleared' : appStatus === 'REVIEW_NEEDED' ? 'status-review' : appStatus === 'FAILED' ? 'status-failed' : ''}">
+        <strong>Property:</strong> ${application.property.address}<br>
+        <strong>Applicant:</strong> ${application.fullName || 'N/A'}<br>
+        <strong>Result:</strong> ${statusText}<br>
+        ${creditScore ? `<strong>Credit Score:</strong> ${creditScore}` : ''}
       </div>
       
-      <div class="result-box">
-        <h3>🔍 Background Check</h3>
-        <p><strong>${backgroundCheckStatus === 'CLEAR' ? '✅ Clear - No issues found' : 
-                     backgroundCheckStatus === 'REVIEW' ? '⚠️ Review Required - Items need attention' : 
-                     '❌ Adverse - Issues found'}</strong></p>
-      </div>
-      
-      <center>
-        <a href="${process.env.NEXTAUTH_URL}/applications/${application.id}" class="button">View Full Report</a>
-      </center>
+      <a href="${process.env.NEXTAUTH_URL}/applications/${application.id}" class="btn">View Full Report</a>
       
       <p style="margin-top: 30px;">Best regards,<br><strong>RentalIQ</strong></p>
     </div>
@@ -149,19 +155,82 @@ RentalIQ`,
       });
     }
 
-    console.log(`✅ Screening results updated for application ${application.id}`);
+    // Also notify the applicant that their check is complete
+    if (application.email) {
+      await sendEmail({
+        to: application.email,
+        subject: 'Background Check Complete - RentalIQ',
+        body: `Hi ${application.fullName || 'Applicant'},
 
-    return NextResponse.json({
-      success: true,
-      message: 'Screening results processed',
+Your background check for ${application.property.address} has been completed.
+
+The property manager will review your application and be in touch soon.
+
+Best regards,
+RentalIQ`,
+        html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #4F46E5; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .info-box { background-color: #D1FAE5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>✅ Background Check Complete</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${application.fullName || 'Applicant'},</p>
+      <div class="info-box">
+        Your background check for <strong>${application.property.address}</strong> has been completed.
+      </div>
+      <p>The property manager will review your application and be in touch soon.</p>
+      <p>Best regards,<br><strong>RentalIQ</strong></p>
+    </div>
+  </div>
+</body>
+</html>`,
+      });
+
+      // SMS notification to applicant
+      if (application.phone) {
+        await sendSMS(
+          application.phone,
+          `RentalIQ: Your background check for ${application.property.address} is complete. The landlord will review and contact you soon.`
+        );
+      }
+    }
+
+    return NextResponse.json({ 
+      received: true,
       applicationId: application.id,
+      status: appStatus,
     });
 
   } catch (error: any) {
-    console.error('Screening webhook error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process screening webhook', details: error.message },
-      { status: 500 }
-    );
+    console.error('❌ Certn webhook error:', error);
+    // Return 200 to prevent Certn from retrying
+    return NextResponse.json({ 
+      received: true, 
+      error: error.message,
+    });
   }
+}
+
+/**
+ * GET /api/screening/webhook
+ * Health check endpoint
+ */
+export async function GET() {
+  return NextResponse.json({ 
+    status: 'ok',
+    service: 'Certn Webhook Handler',
+    timestamp: new Date().toISOString(),
+  });
 }
