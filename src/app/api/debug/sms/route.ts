@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { smsService, getSMSStatus, sendSMS } from '@/lib/smsService';
+import { getSMSStatus, sendSMS } from '@/lib/smsService';
 
 /**
  * GET /api/debug/sms
@@ -28,6 +28,12 @@ export async function GET(request: NextRequest) {
         : '❌ not set',
       TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || '❌ not set',
       
+      // Telnyx
+      TELNYX_API_KEY: process.env.TELNYX_API_KEY 
+        ? `✅ set (${process.env.TELNYX_API_KEY.substring(0, 12)}...)`
+        : '❌ not set',
+      TELNYX_PHONE_NUMBER: process.env.TELNYX_PHONE_NUMBER || '❌ not set',
+      
       // AWS SNS
       SNS_ACCESS_KEY_ID: process.env.SNS_ACCESS_KEY_ID 
         ? `✅ set (${process.env.SNS_ACCESS_KEY_ID.substring(0, 8)}...)`
@@ -36,14 +42,6 @@ export async function GET(request: NextRequest) {
         ? '✅ set (hidden)'
         : '❌ not set',
       SNS_REGION: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1 (default)',
-      
-      // Fallback AWS credentials
-      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID 
-        ? `✅ set (${process.env.AWS_ACCESS_KEY_ID.substring(0, 8)}...)`
-        : '❌ not set',
-      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY 
-        ? '✅ set (hidden)'
-        : '❌ not set',
     };
 
     return NextResponse.json({
@@ -54,15 +52,10 @@ export async function GET(request: NextRequest) {
       details: smsConfig.details,
       environmentVariables: envCheck,
       providerPriority: [
-        '1. Twilio (recommended) - Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER',
-        '2. AWS SNS (fallback) - Set SNS_ACCESS_KEY_ID, SNS_SECRET_ACCESS_KEY, SNS_REGION',
+        '1. Twilio - Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER',
+        '2. Telnyx - Set TELNYX_API_KEY, TELNYX_PHONE_NUMBER',
+        '3. AWS SNS (fallback) - Set SNS_ACCESS_KEY_ID, SNS_SECRET_ACCESS_KEY, SNS_REGION',
       ],
-      snsNotes: {
-        sandboxMode: 'By default, SNS SMS is in sandbox mode. You must verify destination phone numbers first.',
-        verifyPhone: 'To verify a phone: AWS Console → SNS → Text messaging (SMS) → Sandbox destination phone numbers → Add phone number',
-        productionAccess: 'To send to any number: AWS Console → SNS → Text messaging (SMS) → Exit SMS sandbox',
-        spendingLimit: 'Default spending limit is $1/month. Increase in SNS console if needed.',
-      },
       testEndpoint: 'POST /api/debug/sms with body: { "phoneNumber": "+1XXXXXXXXXX" }',
     });
   } catch (error: any) {
@@ -106,6 +99,7 @@ export async function POST(request: NextRequest) {
         details: smsConfig.details,
         setupInstructions: {
           twilio: 'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in Amplify',
+          telnyx: 'Set TELNYX_API_KEY, TELNYX_PHONE_NUMBER in Amplify',
           sns: 'Set SNS_ACCESS_KEY_ID, SNS_SECRET_ACCESS_KEY, SNS_REGION in Amplify',
         },
       }, { status: 400 });
@@ -148,7 +142,13 @@ export async function POST(request: NextRequest) {
 function getTroubleshootingTips(error: string, provider: string): Record<string, string> {
   const tips: Record<string, string> = {};
   
-  if (provider === 'sns') {
+  if (provider === 'telnyx') {
+    tips['Invalid API Key'] = 'Check that TELNYX_API_KEY is correct and starts with KEY...';
+    tips['Phone Number'] = 'Ensure TELNYX_PHONE_NUMBER is a number you own in Telnyx dashboard';
+    tips['Phone Format'] = 'Use E.164 format: +1XXXXXXXXXX (include country code)';
+    tips['Messaging Profile'] = 'Ensure your phone number is assigned to a Messaging Profile';
+    tips['Account Balance'] = 'Check your Telnyx account has sufficient balance';
+  } else if (provider === 'sns') {
     tips['Sandbox Mode'] = 'If phone is not verified, go to AWS SNS Console → Text messaging → Sandbox destination phone numbers → Add and verify your phone';
     tips['IAM Permissions'] = 'Ensure IAM user has sns:Publish permission';
     tips['Spending Limit'] = 'Check/increase SMS spending limit in SNS Console → Text messaging → Account information';

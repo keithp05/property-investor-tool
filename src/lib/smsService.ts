@@ -1,5 +1,5 @@
 /**
- * SMS Service - Supports Twilio (recommended) and AWS SNS
+ * SMS Service - Supports Twilio, Telnyx, and AWS SNS
  * Handles SMS notifications for tenant applications, reminders, etc.
  */
 
@@ -10,7 +10,7 @@ import { SNSClient, PublishCommand, PublishCommandInput } from '@aws-sdk/client-
 // ============================================================================
 
 interface SMSConfig {
-  provider: 'twilio' | 'sns' | 'none';
+  provider: 'twilio' | 'telnyx' | 'sns' | 'none';
   isConfigured: boolean;
   details: string;
 }
@@ -29,6 +29,18 @@ function getSMSConfig(): SMSConfig {
     };
   }
   
+  // Check Telnyx (second priority)
+  const telnyxApiKey = process.env.TELNYX_API_KEY;
+  const telnyxPhone = process.env.TELNYX_PHONE_NUMBER;
+  
+  if (telnyxApiKey && telnyxPhone) {
+    return {
+      provider: 'telnyx',
+      isConfigured: true,
+      details: `Telnyx configured with phone: ${telnyxPhone}`,
+    };
+  }
+  
   // Check AWS SNS (fallback)
   const snsAccessKey = process.env.SNS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
   const snsSecretKey = process.env.SNS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
@@ -44,7 +56,7 @@ function getSMSConfig(): SMSConfig {
   return {
     provider: 'none',
     isConfigured: false,
-    details: 'No SMS provider configured. Set TWILIO_* or SNS_* environment variables.',
+    details: 'No SMS provider configured. Set TWILIO_*, TELNYX_*, or SNS_* environment variables.',
   };
 }
 
@@ -105,6 +117,67 @@ async function sendViaTwilio(phoneNumber: string, message: string): Promise<SMSR
     return {
       success: false,
       error: error.message || 'Failed to send SMS via Twilio',
+    };
+  }
+}
+
+// ============================================================================
+// TELNYX IMPLEMENTATION
+// ============================================================================
+
+async function sendViaTelnyx(phoneNumber: string, message: string): Promise<SMSResult> {
+  const apiKey = process.env.TELNYX_API_KEY;
+  const fromPhone = process.env.TELNYX_PHONE_NUMBER;
+  
+  if (!apiKey || !fromPhone) {
+    return {
+      success: false,
+      error: 'Telnyx credentials not configured',
+    };
+  }
+  
+  try {
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    const formattedFrom = formatPhoneNumber(fromPhone);
+    
+    console.log(`📱 Sending SMS via Telnyx to: ${formattedPhone}`);
+    
+    // Telnyx REST API call
+    const response = await fetch('https://api.telnyx.com/v2/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: formattedFrom,
+        to: formattedPhone,
+        text: message,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('❌ Telnyx error response:', data);
+      const errorMsg = data.errors?.[0]?.detail || data.errors?.[0]?.title || `Telnyx error: ${response.status}`;
+      return {
+        success: false,
+        error: errorMsg,
+      };
+    }
+    
+    console.log(`✅ SMS sent via Telnyx to ${formattedPhone}:`, data.data?.id);
+    
+    return {
+      success: true,
+      messageId: data.data?.id,
+    };
+  } catch (error: any) {
+    console.error('❌ Telnyx send error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to send SMS via Telnyx',
     };
   }
 }
@@ -228,26 +301,29 @@ export interface SMSResult {
  * Format phone number to E.164 format (+1XXXXXXXXXX)
  */
 function formatPhoneNumber(phone: string): string {
-  // Remove all non-numeric characters
-  const cleaned = phone.replace(/\D/g, '');
+  // Remove all non-numeric characters except +
+  const cleaned = phone.replace(/[^\d+]/g, '');
+  
+  // If already has + at start, validate and return
+  if (cleaned.startsWith('+')) {
+    return cleaned;
+  }
+  
+  // Remove any remaining + signs
+  const digitsOnly = cleaned.replace(/\+/g, '');
   
   // If it starts with 1 and is 11 digits, add +
-  if (cleaned.length === 11 && cleaned.startsWith('1')) {
-    return `+${cleaned}`;
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
+    return `+${digitsOnly}`;
   }
   
   // If it's 10 digits, assume US and add +1
-  if (cleaned.length === 10) {
-    return `+1${cleaned}`;
-  }
-  
-  // If already has country code (starts with +), return as is
-  if (phone.startsWith('+')) {
-    return phone;
+  if (digitsOnly.length === 10) {
+    return `+1${digitsOnly}`;
   }
   
   // Default: add +1 for US
-  return `+1${cleaned}`;
+  return `+1${digitsOnly}`;
 }
 
 // ============================================================================
@@ -255,7 +331,7 @@ function formatPhoneNumber(phone: string): string {
 // ============================================================================
 
 /**
- * Send an SMS message via configured provider (Twilio or AWS SNS)
+ * Send an SMS message via configured provider (Twilio, Telnyx, or AWS SNS)
  */
 export async function sendSMS(
   phoneNumber: string,
@@ -276,12 +352,21 @@ export async function sendSMS(
   
   let result: SMSResult;
   
-  if (config.provider === 'twilio') {
-    result = await sendViaTwilio(phoneNumber, message);
-    result.provider = 'twilio';
-  } else {
-    result = await sendViaSNS(phoneNumber, message);
-    result.provider = 'sns';
+  switch (config.provider) {
+    case 'twilio':
+      result = await sendViaTwilio(phoneNumber, message);
+      result.provider = 'twilio';
+      break;
+    case 'telnyx':
+      result = await sendViaTelnyx(phoneNumber, message);
+      result.provider = 'telnyx';
+      break;
+    case 'sns':
+      result = await sendViaSNS(phoneNumber, message);
+      result.provider = 'sns';
+      break;
+    default:
+      result = { success: false, error: 'No provider configured', provider: 'none' };
   }
   
   return result;
