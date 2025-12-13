@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { sendSMS, getSMSStatus } from '@/lib/smsService';
+import { smsService, getSMSStatus, sendSMS } from '@/lib/smsService';
 
 /**
  * GET /api/debug/sms
@@ -15,13 +15,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const status = getSMSStatus();
-    
+    const smsConfig = getSMSStatus();
+
     // Check environment variables (mask sensitive data)
     const envCheck = {
-      // Twilio (recommended)
+      // Twilio
       TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID 
-        ? `${process.env.TWILIO_ACCOUNT_SID.substring(0, 6)}...${process.env.TWILIO_ACCOUNT_SID.slice(-4)}`
+        ? `✅ set (${process.env.TWILIO_ACCOUNT_SID.substring(0, 8)}...)`
         : '❌ not set',
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN 
         ? '✅ set (hidden)'
@@ -30,28 +30,40 @@ export async function GET(request: NextRequest) {
       
       // AWS SNS
       SNS_ACCESS_KEY_ID: process.env.SNS_ACCESS_KEY_ID 
-        ? `✅ ${process.env.SNS_ACCESS_KEY_ID.substring(0, 8)}...`
+        ? `✅ set (${process.env.SNS_ACCESS_KEY_ID.substring(0, 8)}...)`
         : '❌ not set',
       SNS_SECRET_ACCESS_KEY: process.env.SNS_SECRET_ACCESS_KEY 
         ? '✅ set (hidden)'
         : '❌ not set',
-      SNS_REGION: process.env.SNS_REGION || 'us-east-1 (default)',
+      SNS_REGION: process.env.SNS_REGION || process.env.AWS_REGION || 'us-east-1 (default)',
+      
+      // Fallback AWS credentials
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID 
+        ? `✅ set (${process.env.AWS_ACCESS_KEY_ID.substring(0, 8)}...)`
+        : '❌ not set',
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY 
+        ? '✅ set (hidden)'
+        : '❌ not set',
     };
 
     return NextResponse.json({
       success: true,
       message: 'SMS configuration check',
-      activeProvider: status.provider,
-      isConfigured: status.isConfigured,
-      providerDetails: status.details,
+      currentProvider: smsConfig.provider,
+      isConfigured: smsConfig.isConfigured,
+      details: smsConfig.details,
       environmentVariables: envCheck,
-      troubleshooting: {
-        step1: 'Check IAM user has SNS:Publish permission',
-        step2: 'Check SMS spending limit in AWS SNS console (default $1)',
-        step3: 'In sandbox mode, verify destination phone numbers first',
-        step4: 'US numbers dont support custom SenderIDs',
-        awsConsole: 'https://console.aws.amazon.com/sns/v3/home?region=us-east-1#/mobile/text-messaging',
+      providerPriority: [
+        '1. Twilio (recommended) - Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER',
+        '2. AWS SNS (fallback) - Set SNS_ACCESS_KEY_ID, SNS_SECRET_ACCESS_KEY, SNS_REGION',
+      ],
+      snsNotes: {
+        sandboxMode: 'By default, SNS SMS is in sandbox mode. You must verify destination phone numbers first.',
+        verifyPhone: 'To verify a phone: AWS Console → SNS → Text messaging (SMS) → Sandbox destination phone numbers → Add phone number',
+        productionAccess: 'To send to any number: AWS Console → SNS → Text messaging (SMS) → Exit SMS sandbox',
+        spendingLimit: 'Default spending limit is $1/month. Increase in SNS console if needed.',
       },
+      testEndpoint: 'POST /api/debug/sms with body: { "phoneNumber": "+1XXXXXXXXXX" }',
     });
   } catch (error: any) {
     return NextResponse.json({
@@ -73,69 +85,81 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { phoneNumber, message } = await request.json();
+    const body = await request.json();
+    const { phoneNumber } = body;
 
     if (!phoneNumber) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Phone number is required',
-        example: { phoneNumber: '+12105551234', message: 'Test message (optional)' },
+      return NextResponse.json({
+        success: false,
+        error: 'Phone number required',
+        example: { phoneNumber: '+15551234567' },
       }, { status: 400 });
     }
 
-    const status = getSMSStatus();
+    // Check configuration first
+    const smsConfig = getSMSStatus();
     
-    if (!status.isConfigured) {
+    if (!smsConfig.isConfigured) {
       return NextResponse.json({
         success: false,
         error: 'SMS not configured',
-        details: status.details,
-        provider: status.provider,
+        details: smsConfig.details,
+        setupInstructions: {
+          twilio: 'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in Amplify',
+          sns: 'Set SNS_ACCESS_KEY_ID, SNS_SECRET_ACCESS_KEY, SNS_REGION in Amplify',
+        },
       }, { status: 400 });
     }
 
-    const testMessage = message || `Test SMS from RentalIQ at ${new Date().toLocaleTimeString()}. If you received this, SMS is working!`;
+    console.log(`🔍 Testing SMS to: ${phoneNumber}`);
+    console.log(`📱 Using provider: ${smsConfig.provider}`);
 
-    console.log(`📱 === SENDING TEST SMS ===`);
-    console.log(`📱 To: ${phoneNumber}`);
-    console.log(`📱 Provider: ${status.provider}`);
-    console.log(`📱 Message: ${testMessage}`);
+    // Send test message
+    const testMessage = `🔔 RentalIQ Test Message\n\nThis is a test SMS from your RentalIQ application.\n\nTime: ${new Date().toLocaleString()}\nProvider: ${smsConfig.provider}`;
     
     const result = await sendSMS(phoneNumber, testMessage);
-
-    console.log(`📱 === SMS RESULT ===`);
-    console.log(`📱 Success: ${result.success}`);
-    console.log(`📱 MessageId: ${result.messageId || 'N/A'}`);
-    console.log(`📱 Error: ${result.error || 'None'}`);
 
     if (result.success) {
       return NextResponse.json({
         success: true,
-        messageId: result.messageId,
+        message: 'Test SMS sent successfully!',
         provider: result.provider,
-        phoneNumber,
-        message: 'SMS sent successfully! Check your phone.',
+        messageId: result.messageId,
+        sentTo: phoneNumber,
       });
     } else {
       return NextResponse.json({
         success: false,
         error: result.error,
         provider: result.provider,
-        phoneNumber,
-        troubleshooting: {
-          iamPolicy: 'Ensure IAM user has: {"Effect": "Allow", "Action": "sns:Publish", "Resource": "*"}',
-          spendingLimit: 'Check AWS SNS Text Messaging > Spending limit (default $1/month)',
-          sandbox: 'In sandbox, add phone number to "Sandbox destination phone numbers"',
-          region: 'Ensure SNS_REGION matches where you set up SMS',
-        },
+        troubleshooting: getTroubleshootingTips(result.error || '', smsConfig.provider),
       }, { status: 400 });
     }
+
   } catch (error: any) {
-    console.error('❌ Test SMS exception:', error);
+    console.error('❌ SMS test error:', error);
     return NextResponse.json({
       success: false,
-      error: error.message,
-      stack: error.stack?.split('\n').slice(0, 5),
+      error: error.message || 'Failed to send test SMS',
     }, { status: 500 });
   }
+}
+
+function getTroubleshootingTips(error: string, provider: string): Record<string, string> {
+  const tips: Record<string, string> = {};
+  
+  if (provider === 'sns') {
+    tips['Sandbox Mode'] = 'If phone is not verified, go to AWS SNS Console → Text messaging → Sandbox destination phone numbers → Add and verify your phone';
+    tips['IAM Permissions'] = 'Ensure IAM user has sns:Publish permission';
+    tips['Spending Limit'] = 'Check/increase SMS spending limit in SNS Console → Text messaging → Account information';
+    tips['Phone Format'] = 'Use E.164 format: +1XXXXXXXXXX (include country code)';
+    tips['Exit Sandbox'] = 'To send to unverified numbers, request production access in SNS Console';
+  } else if (provider === 'twilio') {
+    tips['Trial Account'] = 'Twilio trial accounts can only send to verified numbers';
+    tips['Phone Format'] = 'Use E.164 format: +1XXXXXXXXXX';
+    tips['Account Balance'] = 'Check Twilio account balance';
+    tips['Phone Number'] = 'Ensure TWILIO_PHONE_NUMBER is an SMS-capable number';
+  }
+  
+  return tips;
 }
