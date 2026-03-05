@@ -124,11 +124,80 @@ export interface CMAReport {
   generatedAt: Date;
 }
 
+export interface PortfolioHealthReport {
+  propertyId: string;
+  currentEstimatedValue: number;
+  purchasePrice: number;
+  appreciation: number;
+  appreciationPercentage: number;
+  currentAreaRents: RentalComp[];
+  currentRentCharged: number;
+  rentDelta: number;
+  crimeScore: CrimeScore;
+  valueTrend: { date: string; value: number }[];
+  rentTrend: { date: string; rent: number }[];
+  recommendation: 'RAISE_RENT' | 'HOLD' | 'SELL' | 'REFINANCE';
+  recommendationReason: string;
+  generatedAt: Date;
+}
+
 class PropertyAnalysisService {
   /**
-   * Generate sales comparables (demo data for now)
+   * Fetch real comps from external webhook (TWIN CMA)
    */
-  private async getSalesComps(property: any): Promise<PropertyComp[]> {
+  private async fetchRealComps(property: any): Promise<{ salesComps: PropertyComp[]; rentalComps: RentalComp[] } | null> {
+    const webhookUrl = process.env.TWIN_CMA_WEBHOOK_URL;
+    if (!webhookUrl) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address: property.address,
+          city: property.city,
+          state: property.state,
+          zip: property.zip,
+          bedrooms: property.bedrooms,
+          bathrooms: property.bathrooms,
+          squareFeet: property.squareFeet,
+          purchasePrice: property.purchasePrice,
+          rehabCost: property.rehabCost,
+          propertyType: property.propertyType,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`TWIN CMA webhook returned status ${response.status}. Falling back to generated comps.`);
+        return null;
+      }
+
+      const data = await response.json();
+
+      // Validate that the response has the expected shape
+      if (data && Array.isArray(data.salesComps) && Array.isArray(data.rentalComps)) {
+        return {
+          salesComps: data.salesComps as PropertyComp[],
+          rentalComps: data.rentalComps as RentalComp[],
+        };
+      }
+
+      console.warn('TWIN CMA webhook response missing salesComps or rentalComps arrays. Falling back to generated comps.');
+      return null;
+    } catch (error) {
+      console.warn('TWIN CMA webhook request failed. Falling back to generated comps.', error);
+      return null;
+    }
+  }
+
+  /**
+   * Generate fallback sales comparables (demo data)
+   */
+  private async getFallbackSalesComps(property: any): Promise<PropertyComp[]> {
     // Demo comparable sales
     const basePrice = property.purchasePrice || 250000;
     const baseSqft = property.squareFeet || 1500;
@@ -174,9 +243,9 @@ class PropertyAnalysisService {
   }
 
   /**
-   * Generate rental comparables (demo data for now)
+   * Generate fallback rental comparables (demo data)
    */
-  private async getRentalComps(property: any): Promise<RentalComp[]> {
+  private async getFallbackRentalComps(property: any): Promise<RentalComp[]> {
     const baseSqft = property.squareFeet || 1500;
     const baseRent = Math.round((property.purchasePrice || 250000) * 0.008); // 0.8% rule
 
@@ -491,12 +560,25 @@ Provide analysis in this JSON format:
   async generateCMAReport(property: any): Promise<CMAReport> {
     console.log('🏠 Generating CMA Report for:', property.address);
 
-    // Gather all data in parallel
-    const [comps, rentalComps, crimeScore] = await Promise.all([
-      this.getSalesComps(property),
-      this.getRentalComps(property),
-      this.getCrimeScore(property),
-    ]);
+    // Try to fetch real comps from webhook first
+    let comps: PropertyComp[];
+    let rentalComps: RentalComp[];
+
+    const realComps = await this.fetchRealComps(property);
+    if (realComps) {
+      console.log('✅ Using real comps from TWIN CMA webhook');
+      comps = realComps.salesComps;
+      rentalComps = realComps.rentalComps;
+    } else {
+      console.log('⚠️ Falling back to generated comps');
+      [comps, rentalComps] = await Promise.all([
+        this.getFallbackSalesComps(property),
+        this.getFallbackRentalComps(property),
+      ]);
+    }
+
+    // Get crime score in parallel (not dependent on comps)
+    const crimeScore = await this.getCrimeScore(property);
 
     // Calculate estimated values
     const avgCompPrice = comps.reduce((sum, comp) => sum + comp.price, 0) / comps.length;
@@ -548,6 +630,120 @@ Provide analysis in this JSON format:
     };
 
     console.log('✅ CMA Report generated successfully with 3 expert analyses');
+    return report;
+  }
+
+  /**
+   * Generate a portfolio health report for an owned property
+   */
+  async generatePortfolioHealthReport(
+    property: any,
+    currentRentCharged: number
+  ): Promise<PortfolioHealthReport> {
+    console.log('📊 Generating Portfolio Health Report for:', property.address);
+
+    // Gather current area comps and crime score
+    const realComps = await this.fetchRealComps(property);
+    let rentalComps: RentalComp[];
+    let salesComps: PropertyComp[];
+
+    if (realComps) {
+      salesComps = realComps.salesComps;
+      rentalComps = realComps.rentalComps;
+    } else {
+      [salesComps, rentalComps] = await Promise.all([
+        this.getFallbackSalesComps(property),
+        this.getFallbackRentalComps(property),
+      ]);
+    }
+
+    const crimeScore = await this.getCrimeScore(property);
+
+    // Calculate current estimated value from comps
+    const avgCompPrice = salesComps.reduce((sum, comp) => sum + comp.price, 0) / salesComps.length;
+    const currentEstimatedValue = Math.round(avgCompPrice);
+
+    // Appreciation
+    const purchasePrice = property.purchasePrice || currentEstimatedValue;
+    const appreciation = currentEstimatedValue - purchasePrice;
+    const appreciationPercentage = purchasePrice > 0
+      ? +((appreciation / purchasePrice) * 100).toFixed(2)
+      : 0;
+
+    // Rent delta
+    const avgAreaRent = rentalComps.reduce((sum, comp) => sum + comp.monthlyRent, 0) / rentalComps.length;
+    const rentDelta = Math.round(avgAreaRent - currentRentCharged);
+
+    // Generate quarterly value trend (last 2 years = 8 quarters)
+    const valueTrend: { date: string; value: number }[] = [];
+    const now = new Date();
+    for (let i = 7; i >= 0; i--) {
+      const trendDate = new Date(now);
+      trendDate.setMonth(trendDate.getMonth() - i * 3);
+      const quarterLabel = `${trendDate.getFullYear()}-Q${Math.floor(trendDate.getMonth() / 3) + 1}`;
+      // Simulate a gradual appreciation trend toward current value
+      const progressFraction = (8 - i) / 8;
+      const trendValue = Math.round(
+        purchasePrice + (currentEstimatedValue - purchasePrice) * progressFraction * (0.85 + Math.random() * 0.3)
+      );
+      valueTrend.push({ date: quarterLabel, value: trendValue });
+    }
+
+    // Generate quarterly rent trend (last 2 years = 8 quarters)
+    const rentTrend: { date: string; rent: number }[] = [];
+    for (let i = 7; i >= 0; i--) {
+      const trendDate = new Date(now);
+      trendDate.setMonth(trendDate.getMonth() - i * 3);
+      const quarterLabel = `${trendDate.getFullYear()}-Q${Math.floor(trendDate.getMonth() / 3) + 1}`;
+      const progressFraction = (8 - i) / 8;
+      const trendRent = Math.round(
+        currentRentCharged + (avgAreaRent - currentRentCharged) * progressFraction * (0.8 + Math.random() * 0.4)
+      );
+      rentTrend.push({ date: quarterLabel, rent: trendRent });
+    }
+
+    // Determine recommendation
+    let recommendation: PortfolioHealthReport['recommendation'];
+    let recommendationReason: string;
+
+    const rentGapPercent = avgAreaRent > 0 ? ((avgAreaRent - currentRentCharged) / avgAreaRent) * 100 : 0;
+    const appreciationPercent = appreciationPercentage;
+
+    if (rentGapPercent >= 10) {
+      // Rents in the area have grown significantly — landlord should raise rent
+      recommendation = 'RAISE_RENT';
+      recommendationReason = `Area rents are approximately ${rentGapPercent.toFixed(1)}% higher than your current rent ($${Math.round(avgAreaRent).toLocaleString()} vs $${currentRentCharged.toLocaleString()}). Raising rent to market rate could increase annual income by $${(rentDelta * 12).toLocaleString()}.`;
+    } else if (appreciationPercent >= 30 && crimeScore.scoreNumber < 65) {
+      // Strong appreciation but declining neighborhood — consider selling
+      recommendation = 'SELL';
+      recommendationReason = `The property has appreciated ${appreciationPercent.toFixed(1)}% since purchase (+$${appreciation.toLocaleString()}), but the crime score of ${crimeScore.overallScore} suggests neighborhood conditions may be deteriorating. Locking in gains now may be prudent.`;
+    } else if (appreciationPercent >= 20 && currentRentCharged > 0) {
+      // Good appreciation — consider a cash-out refinance
+      recommendation = 'REFINANCE';
+      recommendationReason = `The property has appreciated ${appreciationPercent.toFixed(1)}% (+$${appreciation.toLocaleString()}). A cash-out refinance could unlock equity for additional investments while retaining the asset.`;
+    } else {
+      recommendation = 'HOLD';
+      recommendationReason = `The property is performing steadily with ${appreciationPercent.toFixed(1)}% appreciation and rents near market rate. Continue holding for long-term wealth building.`;
+    }
+
+    const report: PortfolioHealthReport = {
+      propertyId: property.id,
+      currentEstimatedValue,
+      purchasePrice,
+      appreciation,
+      appreciationPercentage,
+      currentAreaRents: rentalComps,
+      currentRentCharged,
+      rentDelta,
+      crimeScore,
+      valueTrend,
+      rentTrend,
+      recommendation,
+      recommendationReason,
+      generatedAt: new Date(),
+    };
+
+    console.log('✅ Portfolio Health Report generated for:', property.address);
     return report;
   }
 }
