@@ -1,3 +1,4 @@
+import { verifyApplicationPayment } from '@/lib/application-payment';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
@@ -9,16 +10,14 @@ import Stripe from 'stripe';
 export async function POST(request: NextRequest) {
   try {
     // Initialize Stripe inside the function to avoid build-time errors
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
       return NextResponse.json(
         { error: 'Stripe not configured' },
         { status: 500 }
       );
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
-    });
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
@@ -54,13 +53,11 @@ export async function POST(request: NextRequest) {
         const applicationId = paymentIntent.metadata.applicationId;
 
         if (applicationId) {
-          await prisma.tenantApplication.update({
-            where: { id: applicationId },
-            data: {
-              applicationFeePaid: true,
-              stripePaymentIntentId: paymentIntent.id,
-            },
-          });
+          const application = await prisma.tenantApplication.findUnique({ where: { id: applicationId } });
+          if (!application) break;
+          // Fetch current provider state so delayed/replayed events cannot restore a refunded payment.
+          const payment = await verifyApplicationPayment(application, paymentIntent.id);
+          await prisma.tenantApplication.update({ where: { id: applicationId }, data: payment });
 
           console.log(`✅ Updated application ${applicationId} - payment confirmed`);
 

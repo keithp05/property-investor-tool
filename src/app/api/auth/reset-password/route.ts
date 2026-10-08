@@ -1,11 +1,12 @@
+import { requireServerEnv } from '@/lib/server-config';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 
 const getJwtSecret = () => {
-  const secret = process.env.NEXTAUTH_SECRET;
-  return new TextEncoder().encode(secret || 'fallback-secret-key-for-development');
+  const secret = requireServerEnv('NEXTAUTH_SECRET');
+  return new TextEncoder().encode(secret);
 };
 
 /**

@@ -28,8 +28,13 @@ export default function AdminSidebar() {
   const router = useRouter();
 
   async function handleLogout() {
-    // Clear the admin session cookie
-    document.cookie = 'admin_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    try {
+      const response = await fetch('/api/admin/auth/logout', { method: 'POST' });
+      if (!response.ok) throw new Error('Logout failed');
+    } catch {
+      alert('Sign out failed. Please try again.');
+      return;
+    }
     router.push('/admin/login');
     router.refresh();
   }

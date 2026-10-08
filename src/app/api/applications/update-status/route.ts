@@ -70,12 +70,12 @@ export async function PATCH(request: NextRequest) {
     // Send notification email to applicant
     let notificationResult = { emailSent: false, smsSent: false };
     try {
-      const applicantName = `${application.firstName} ${application.lastName}`;
+      const applicantName = application.fullName || 'Applicant';
       const propertyAddress = application.property?.address || 'the property';
       
       console.log(`📧 Sending ${status} notification to ${application.email}`);
       
-      notificationResult = await sendApplicationStatusNotification({
+      if (application.email) notificationResult = await sendApplicationStatusNotification({
         name: applicantName,
         email: application.email,
         phone: application.phone || undefined,

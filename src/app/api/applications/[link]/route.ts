@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ link: string }> | { link: string } }
+  { params }: { params: Promise<{ link: string }> }
 ) {
   try {
     // Handle both sync and async params (Next.js 13+ vs 15+)

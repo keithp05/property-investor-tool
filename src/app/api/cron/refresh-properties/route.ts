@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
 
     // Verify cron secret for security
     const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
+    const cronSecret = process.env.CRON_SECRET;
 
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret?.trim() || authHeader !== `Bearer ${cronSecret}`) {
       console.error('❌ Unauthorized cron request');
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
@@ -184,9 +184,9 @@ export async function POST(request: NextRequest) {
 // Allow GET requests to check cron job status
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET || 'your-secret-key';
+  const cronSecret = process.env.CRON_SECRET;
 
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret?.trim() || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 

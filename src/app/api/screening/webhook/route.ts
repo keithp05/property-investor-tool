@@ -1,3 +1,4 @@
+import { verifyCertnSignature } from '@/lib/certn-webhook';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/notifications';
@@ -13,10 +14,13 @@ import { parseWebhookPayload, mapCertnStatusToAppStatus } from '@/lib/certnServi
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get raw body for potential signature verification
-    const body = await request.json();
-    
-    console.log('📋 Certn webhook received:', JSON.stringify(body, null, 2));
+    const secret = process.env.CERTN_WEBHOOK_SECRET;
+    if (!secret?.trim()) return NextResponse.json({ error: 'Screening webhook is not configured' }, { status: 503 });
+    const rawBody = await request.text();
+    if (!verifyCertnSignature(rawBody, request.headers.get('certn-signature'), secret)) {
+      return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
+    }
+    const body = JSON.parse(rawBody);
 
     // Parse the webhook payload
     const parsed = parseWebhookPayload(body);
@@ -215,11 +219,7 @@ RentalIQ`,
 
   } catch (error: any) {
     console.error('❌ Certn webhook error:', error);
-    // Return 200 to prevent Certn from retrying
-    return NextResponse.json({ 
-      received: true, 
-      error: error.message,
-    });
+    return NextResponse.json({ error: 'Screening webhook failed' }, { status: error instanceof SyntaxError ? 400 : 500 });
   }
 }
 

@@ -1,31 +1,5 @@
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import { verifyAdminSession } from '@/lib/admin-session';
 import AdminSidebar from './components/AdminSidebar';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || 'fallback-secret');
-
-async function verifyAdminSession() {
-  try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get('admin_session')?.value;
-
-    if (!sessionToken) {
-      return null;
-    }
-
-    const { payload } = await jwtVerify(sessionToken, JWT_SECRET);
-    
-    if (payload.type !== 'admin_session' || !payload.mfaVerified) {
-      return null;
-    }
-
-    return {
-      mfaVerified: true,
-    };
-  } catch {
-    return null;
-  }
-}
 
 export default async function AdminLayout({
   children,

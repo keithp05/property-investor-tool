@@ -1,3 +1,4 @@
+import { verifyApplicationPayment, assertApplicationOpen, ApplicationPaymentError } from '@/lib/application-payment';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendApplicationReceivedSMS } from '@/lib/smsService';
@@ -45,13 +46,8 @@ export async function POST(
       );
     }
 
-    if (application.status !== 'PENDING') {
-      console.error('❌ Application already submitted:', application.status);
-      return NextResponse.json(
-        { success: false, error: 'Application already submitted' },
-        { status: 400 }
-      );
-    }
+    assertApplicationOpen(application);
+    const payment = await verifyApplicationPayment(application, data.stripePaymentIntentId);
 
     // Prepare update data - only include fields that exist in schema
     const updateData: any = {
@@ -118,8 +114,7 @@ export async function POST(
       idDocumentUrl: data.idDocumentUrl || null,
 
       // Payment tracking
-      applicationFeePaid: data.applicationFeePaid || false,
-      stripePaymentIntentId: data.stripePaymentIntentId || null,
+      ...payment,
 
       // Update status
       status: 'SUBMITTED',
@@ -129,12 +124,12 @@ export async function POST(
     console.log('📝 Updating application with status: SUBMITTED');
 
     // Update application with submitted data
-    const updatedApplication = await prisma.tenantApplication.update({
-      where: { applicationLink: link },
+    const submitted = await prisma.tenantApplication.updateMany({
+      where: { applicationLink: link, status: 'PENDING' },
       data: updateData,
     });
 
-    console.log(`✅ Application submitted: ${updatedApplication.id}`);
+    if (submitted.count !== 1) return NextResponse.json({ success: false, error: 'Application already submitted' }, { status: 409 });
 
     // Build property address for notification
     const propertyAddress = application.property
@@ -162,11 +157,12 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      applicationId: updatedApplication.id,
+      applicationId: application.id,
       message: 'Application submitted successfully',
     });
 
   } catch (error: any) {
+    if (error instanceof ApplicationPaymentError) return NextResponse.json({ success: false, error: error.message }, { status: error.status });
     console.error('❌ Submit application error:', error);
     console.error('❌ Error details:', error.message);
     console.error('❌ Error stack:', error.stack);

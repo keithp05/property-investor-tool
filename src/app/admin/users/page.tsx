@@ -61,7 +61,6 @@ export default function UsersPage() {
   // Password reset result
   const [newPassword, setNewPassword] = useState<{ email: string; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [testingPassword, setTestingPassword] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Edit form
@@ -216,34 +215,7 @@ export default function UsersPage() {
     }
   }
 
-  async function testPassword() {
-    if (!newPassword) return;
-    setTestingPassword(true);
-    setTestResult(null);
-    
-    try {
-      const response = await fetch('/api/admin/test-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: newPassword.email, 
-          password: newPassword.password 
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.loginWouldWork) {
-        setTestResult({ success: true, message: 'Password is correct! User can log in with this password.' });
-      } else {
-        setTestResult({ success: false, message: `Password test failed. Debug: ${JSON.stringify(data.debug || data.error)}` });
-      }
-    } catch (err: any) {
-      setTestResult({ success: false, message: `Test error: ${err.message}` });
-    } finally {
-      setTestingPassword(false);
-    }
-  }
+
 
   // Filter users
   const filteredUsers = users.filter(user => {
@@ -721,16 +693,6 @@ export default function UsersPage() {
                   </button>
                 </div>
               </div>
-              
-              {/* Test Password Button */}
-              <button
-                onClick={testPassword}
-                disabled={testingPassword}
-                className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-700 flex items-center justify-center gap-2"
-              >
-                {testingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
-                {testingPassword ? 'Testing...' : 'Test Password'}
-              </button>
               
               {/* Test Result */}
               {testResult && (

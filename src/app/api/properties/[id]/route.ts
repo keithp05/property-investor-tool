@@ -174,6 +174,7 @@ export async function PUT(
 
     // Update the property and fetch with all relations
     const updatedProperty = await prisma.property.update({
+      omit: { plaidAccessToken: true },
       where: { id: propertyId },
       data: updateData,
       include: {
@@ -218,7 +219,7 @@ export async function PUT(
         },
         leaseStartDate: updatedProperty.currentTenancy.leaseStartDate,
         leaseEndDate: updatedProperty.currentTenancy.leaseEndDate,
-        rentAmount: updatedProperty.currentTenancy.rentAmount,
+        rentAmount: updatedProperty.currentTenancy.monthlyRent,
         securityDeposit: updatedProperty.currentTenancy.securityDeposit,
       } : null,
     };
@@ -322,8 +323,9 @@ export async function GET(
     }
 
     // Regular database property fetch
-    const property = await prisma.property.findUnique({
-      where: { id: propertyId },
+    const property = await prisma.property.findFirst({
+      where: { id: propertyId, landlord: { userId: session.user.id } },
+      omit: { plaidAccessToken: true },
       include: {
         landlord: {
           include: {
@@ -383,7 +385,7 @@ export async function GET(
         },
         leaseStartDate: property.currentTenancy.leaseStartDate,
         leaseEndDate: property.currentTenancy.leaseEndDate,
-        rentAmount: property.currentTenancy.rentAmount,
+        rentAmount: property.currentTenancy.monthlyRent,
         securityDeposit: property.currentTenancy.securityDeposit,
       } : null,
     };

@@ -20,6 +20,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        mfaCode: { label: 'Authenticator code', type: 'text' },
         rememberMe: { label: 'Remember Me', type: 'text' },
       },
       async authorize(credentials) {
@@ -61,6 +62,10 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        if (!user.isActive || user.isSuspended) return null;
+        if (user.mfaEnabled && (!user.mfaSecret || !credentials.mfaCode ||
+            !authenticator.verify({ token: credentials.mfaCode, secret: user.mfaSecret }))) return null;
+
         // Update last login
         try {
           await prisma.user.update({
@@ -84,7 +89,8 @@ export const authOptions: NextAuthOptions = {
           subscriptionTier: user.subscriptionTier,
           subscriptionStatus: user.subscriptionStatus,
           rememberMe: credentials.rememberMe === 'true',
-          lastMfaVerifiedAt: Date.now(),
+          lastMfaVerifiedAt: user.mfaEnabled ? Date.now() : null,
+          mfaEnabled: user.mfaEnabled,
         };
       },
     }),
@@ -155,7 +161,8 @@ export const authOptions: NextAuthOptions = {
           }
 
           // If MFA is enabled, verify the code
-          if (user.mfaEnabled && user.mfaSecret) {
+          if (user.mfaEnabled) {
+            if (!user.mfaSecret) return null;
             if (!credentials.mfaCode) {
               console.log('Magic link login failed: MFA required but no code');
               return null;
@@ -175,13 +182,15 @@ export const authOptions: NextAuthOptions = {
           }
 
           // Mark magic link as used
-          await (prisma as any).magicLink.update({
-            where: { token: credentials.token },
+          const consumed = await prisma.magicLink.updateMany({
+            where: { token: credentials.token, used: false, expires: { gt: new Date() } },
             data: {
               used: true,
               usedAt: new Date(),
             },
           });
+
+          if (consumed.count !== 1) return null;
 
           // Update last login
           try {

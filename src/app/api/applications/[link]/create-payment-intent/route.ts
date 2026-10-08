@@ -1,3 +1,4 @@
+import { applicationFeeCents, assertApplicationOpen, ApplicationPaymentError } from '@/lib/application-payment';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
@@ -22,9 +23,7 @@ export async function POST(
       );
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
-    });
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
     console.log(`💳 Creating payment intent for application link: ${link}`);
 
@@ -50,6 +49,8 @@ export async function POST(
       );
     }
 
+    assertApplicationOpen(application);
+
     // Check if already paid
     if (application.applicationFeePaid) {
       console.log(`⚠️ Application ${application.id} already paid`);
@@ -61,7 +62,7 @@ export async function POST(
 
     // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(application.applicationFee * 100), // Convert to cents
+      amount: applicationFeeCents(application.applicationFee), // Convert to cents
       currency: 'usd',
       automatic_payment_methods: {
         enabled: true,
@@ -72,7 +73,9 @@ export async function POST(
         propertyAddress: `${application.property.address}, ${application.property.city}, ${application.property.state}`,
       },
       description: `Rental Application Fee - ${application.property.address}`,
-    });
+    }, { idempotencyKey: `application-${application.id}-${applicationFeeCents(application.applicationFee)}` });
+
+    await prisma.tenantApplication.update({ where: { id: application.id }, data: { stripePaymentIntentId: paymentIntent.id } });
 
     console.log(`✅ Created payment intent for application ${application.id}: ${paymentIntent.id}`);
 
@@ -83,6 +86,7 @@ export async function POST(
     });
 
   } catch (error: any) {
+    if (error instanceof ApplicationPaymentError) return NextResponse.json({ success: false, error: error.message }, { status: error.status });
     console.error('❌ Create payment intent error:', error);
     return NextResponse.json(
       {

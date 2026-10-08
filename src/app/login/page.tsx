@@ -15,6 +15,7 @@ function LoginForm() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('magic-link');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
@@ -37,12 +38,13 @@ function LoginForm() {
       const result = await signIn('credentials', {
         email,
         password,
+        mfaCode,
         rememberMe: rememberMe ? 'true' : 'false',
         redirect: false,
       });
 
       if (result?.error) {
-        setError('Invalid email or password');
+        setError('Sign-in failed. Check your email, password and authenticator code.');
       } else {
         router.push('/');
         router.refresh();
@@ -280,6 +282,10 @@ function LoginForm() {
                   </Link>
                 </div>
 
+                <div>
+                  <label htmlFor="mfaCode" className="block text-sm font-medium text-gray-700">Authenticator code (if enabled)</label>
+                  <input id="mfaCode" name="mfaCode" value={mfaCode} onChange={e => setMfaCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3" />
+                </div>
                 <button
                   type="submit"
                   disabled={loading}

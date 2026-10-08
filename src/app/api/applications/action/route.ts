@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { sendEmail } from '@/lib/email';
+import { sendEmail } from '@/lib/notifications';
 import { sendSMS } from '@/lib/smsService';
 
 /**
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const applicantName = `${application.firstName || ''} ${application.lastName || ''}`.trim() || 'Applicant';
+    const applicantName = application.fullName || 'Applicant';
     const propertyAddress = application.property?.address || 'the property';
     const landlordName = (session.user as any).name || 'Property Manager';
 
@@ -201,6 +201,7 @@ export async function POST(request: NextRequest) {
           to: application.email,
           subject: emailSubject,
           html: emailBody,
+          body: emailBody.replace(/<[^>]*>/g, ' '),
         });
         emailSent = true;
         console.log(`📧 Email sent to ${application.email}`);

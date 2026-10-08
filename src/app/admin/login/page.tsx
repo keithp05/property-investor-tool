@@ -39,25 +39,14 @@ export default function AdminLoginPage() {
       const data = await res.json();
 
       if (!data.success) {
-        // Show debug info if available
-        let debugInfo = '';
-        if (data.debug) {
-          if (typeof data.debug === 'string') {
-            debugInfo = ` (${data.debug})`;
-          } else {
-            debugInfo = ` (env: ${data.debug.envVarSet}, expected: ${data.debug.expectedLength}, received: ${data.debug.receivedLength})`;
-          }
-        }
-        setError((data.error || 'Login failed') + debugInfo);
+        setError(data.error || 'Login failed');
         return;
       }
 
       if (data.needsMfaSetup) {
         // Need to set up MFA
         await setupMfa();
-      } else if (data.skipMfa) {
-        // MFA skipped, go directly to admin
-        router.push('/admin');
+
       } else {
         // MFA already set up, go to verify
         setStep('mfa-verify');
