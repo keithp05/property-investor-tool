@@ -1,8 +1,27 @@
 # Local repair review — 2026-10-08
 
 Branch: `codex/repair-20261008`, based on `b80b8e8`.
-The original shared checkout is unchanged. No live database migration, push, deployment,
-credential rotation, provider call, email or SMS has been performed.
+The original shared checkout is unchanged. The initial repair was verified locally;
+the subsequent deployment was explicitly authorized by Keith. No credential rotation,
+test email or test SMS has been performed.
+
+## Deployment preparation
+
+- Verified Amplify app `Rental-IQ` (`d3q1fuby25122q`), branch `develop`, serves
+  `https://app.satx-property.com`. The existing sign-in URL was aligned with this domain.
+- Read-only inspection of the configured RDS database found nine completed migrations,
+  one user, two properties and 26 applications. The missing schema objects match the
+  additive repair migrations. Preserve those records.
+- Requested recovery snapshot `rentaliq-pre-repair-20261008`; release must wait for it
+  to become available.
+- Amplify now runs the isolated regression suite and prepares an ignored, mode-0600
+  `.env.production` from explicitly allowed application settings before migrations.
+  Temporary build AWS credentials are excluded. Secrets are not placed in Next's
+  public `env` configuration. Artifact access must remain limited to deployment operators.
+- Required runtime settings are present. Certn signing configuration remains absent;
+  signed screening callbacks stay unavailable until configured.
+- Deployment success must be established from the Amplify job and live endpoint checks;
+  these preparation notes alone do not assert that the release is live.
 
 ## Repaired
 
@@ -64,7 +83,7 @@ credential rotation, provider call, email or SMS has been performed.
 3. Supply server-side runtime configuration through the hosting secret manager:
    DATABASE_URL, NEXTAUTH_SECRET, ADMIN_SECRET, and enabled provider settings.
    Signed Certn delivery requires CERTN_WEBHOOK_SECRET from Certn and signing enabled.
-   No real values were read or changed during this repair.
+   Deployment preparation handles existing values in memory without displaying them.
 4. Existing legacy `admin_mfa_config` enrollments require explicit migration. The new
    flow preserves them and refuses automatic replacement. Existing `admin_mfa_secret`
    plus `admin_mfa_verified=true` enrollments remain usable.

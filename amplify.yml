@@ -5,6 +5,8 @@ frontend:
       commands:
         - npm ci --legacy-peer-deps
         - npx prisma generate
+        - npm test
+        - node scripts/prepare-runtime-env.cjs
         - npx prisma migrate deploy
     build:
       commands:
